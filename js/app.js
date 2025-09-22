@@ -1,230 +1,458 @@
-// frontend/js/app.js
-const API_URL =
-  "https://bridge-aggregator-api.shapehaveninnovations.workers.dev"; // Will be updated after deploying worker
+// Add this to the beginning of your app.js file
 
-const CHAIN_INFO = {
+// Theme Management
+class ThemeManager {
+  constructor() {
+    this.theme = this.getStoredTheme() || this.getSystemTheme();
+    this.init();
+  }
+
+  init() {
+    // Apply initial theme
+    this.applyTheme(this.theme);
+
+    // Create and insert theme toggle button
+    this.createThemeToggle();
+
+    // Listen for system theme changes
+    this.watchSystemTheme();
+  }
+
+  getStoredTheme() {
+    return localStorage.getItem("bridge-theme");
+  }
+
+  getSystemTheme() {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+
+  applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    this.theme = theme;
+    localStorage.setItem("bridge-theme", theme);
+
+    // Update theme toggle icon
+    this.updateToggleIcon(theme);
+  }
+
+  createThemeToggle() {
+    const toggle = document.createElement("button");
+    toggle.className = "theme-toggle";
+    toggle.setAttribute("aria-label", "Toggle theme");
+    toggle.setAttribute("title", "Toggle dark/light mode");
+
+    toggle.innerHTML = this.getIconHTML(this.theme);
+
+    toggle.addEventListener("click", () => {
+      const newTheme = this.theme === "dark" ? "light" : "dark";
+      this.applyTheme(newTheme);
+    });
+
+    document.body.appendChild(toggle);
+    this.toggleButton = toggle;
+  }
+
+  updateToggleIcon(theme) {
+    if (this.toggleButton) {
+      this.toggleButton.innerHTML = this.getIconHTML(theme);
+    }
+  }
+
+  getIconHTML(theme) {
+    if (theme === "dark") {
+      // Sun icon for dark mode (switch to light)
+      return `
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+            `;
+    } else {
+      // Moon icon for light mode (switch to dark)
+      return `
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+            `;
+    }
+  }
+
+  watchSystemTheme() {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    // Modern browsers
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener("change", (e) => {
+        // Only auto-switch if user hasn't manually set a preference
+        if (!this.getStoredTheme()) {
+          this.applyTheme(e.matches ? "dark" : "light");
+        }
+      });
+    }
+  }
+}
+
+// Initialize theme manager when DOM is ready
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    new ThemeManager();
+  });
+} else {
+  new ThemeManager();
+}
+
+// Bridge Aggregator Application
+const API_BASE_URL =
+  "https://bridge-aggregator-api.shapehaveninnovations.workers.dev";
+
+// Chain configurations
+const chains = {
   1: { name: "Ethereum", icon: "⟠" },
   137: { name: "Polygon", icon: "🟣" },
   42161: { name: "Arbitrum", icon: "🔵" },
   10: { name: "Optimism", icon: "🔴" },
   56: { name: "BSC", icon: "🟡" },
   43114: { name: "Avalanche", icon: "🔺" },
+  8453: { name: "Base", icon: "🔷" },
+  100: { name: "Gnosis", icon: "🦉" },
+  250: { name: "Fantom", icon: "👻" },
 };
 
-const TOKEN_ADDRESSES = {
-  USDC: {
-    1: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-    137: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
-    42161: "0xff970a61a04b1ca14834a43f5de4533ebddb5cc8",
-    10: "0x7f5c764cbc14f9669b88837ca1490cca17c31607",
-    56: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
-    43114: "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
-  },
-  USDT: {
-    1: "0xdac17f958d2ee523a2206206994597c13d831ec7",
-    137: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
-    42161: "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9",
-    10: "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58",
-    56: "0x55d398326f99059ff775485246999027b3197955",
-    43114: "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
-  },
+// Bridge configurations with proper icons
+const bridgeIcons = {
+  paraswap: "🔄",
+  "0x": "0️⃣",
+  socket: "🔌",
+  hop: "🐰",
+  stargate: "⭐",
+  across: "➡️",
+  synapse: "🧬",
+  cbridge: "🌉",
 };
 
-class BridgeAggregator {
-  constructor() {
-    this.initializeEventListeners();
-  }
+// Initialize the application
+document.addEventListener("DOMContentLoaded", function () {
+  const form = document.getElementById("bridgeForm");
+  const compareBtn = document.getElementById("compareBtn");
+  const btnText = compareBtn.querySelector(".btn-text");
+  const loader = compareBtn.querySelector(".loader");
+  const resultsSection = document.getElementById("results");
+  const resultsContainer = document.getElementById("resultsContainer");
+  const errorMessage = document.getElementById("errorMessage");
+  const successMessage = document.getElementById("successMessage");
+  const savingsBadge = document.getElementById("savingsBadge");
+  const disclaimerLink = document.getElementById("disclaimerLink");
+  const disclaimerModal = document.getElementById("disclaimerModal");
 
-  initializeEventListeners() {
-    document
-      .getElementById("compareBtn")
-      .addEventListener("click", () => this.compareBridges());
+  // Form submission handler
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await compareBridges();
+  });
 
-    // Auto-switch chains if same selected
-    document.getElementById("fromChain").addEventListener("change", (e) => {
-      const toChain = document.getElementById("toChain");
-      if (e.target.value === toChain.value) {
-        // Switch to a different chain
-        const options = Array.from(toChain.options);
-        const nextOption = options.find((opt) => opt.value !== e.target.value);
-        if (nextOption) toChain.value = nextOption.value;
+  // Disclaimer modal handler
+  if (disclaimerLink && disclaimerModal) {
+    disclaimerLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      disclaimerModal.showModal();
+    });
+
+    const modalClose = disclaimerModal.querySelector(".modal-close");
+    if (modalClose) {
+      modalClose.addEventListener("click", () => {
+        disclaimerModal.close();
+      });
+    }
+
+    // Close on backdrop click
+    disclaimerModal.addEventListener("click", (e) => {
+      if (e.target === disclaimerModal) {
+        disclaimerModal.close();
       }
     });
   }
 
-  async compareBridges() {
+  // Compare bridges function
+  async function compareBridges() {
+    // Clear previous messages
+    hideMessages();
+
+    // Get form values
     const fromChain = document.getElementById("fromChain").value;
     const toChain = document.getElementById("toChain").value;
     const token = document.getElementById("token").value;
     const amount = document.getElementById("amount").value;
 
-    if (!amount || amount <= 0) {
-      this.showError("Please enter a valid amount");
+    // Validation
+    if (!amount || parseFloat(amount) <= 0) {
+      showError("Please enter a valid amount");
       return;
     }
 
-    this.showLoading(true);
-    this.hideError();
+    if (fromChain === toChain) {
+      showError("Source and destination chains must be different");
+      return;
+    }
+
+    // Show loading state
+    setLoadingState(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/quotes`, {
+      // API call to compare bridges
+      const response = await fetch(`${API_BASE_URL}/api/compare`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          fromChain,
-          toChain,
+          fromChainId: fromChain,
+          toChainId: toChain,
           token,
           amount: parseFloat(amount),
-          tokenAddress: TOKEN_ADDRESSES[token]?.[fromChain],
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to fetch quotes");
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
       const data = await response.json();
-      this.displayResults(data.quotes, fromChain, toChain, amount, token);
+
+      if (data.success && data.bridges && data.bridges.length > 0) {
+        displayResults(data.bridges, amount, token);
+        showSuccess(`Found ${data.bridges.length} bridge options`);
+      } else {
+        showError("No bridges available for this route");
+      }
     } catch (error) {
-      this.showError("Failed to fetch bridge quotes. Please try again.");
-      console.error("Error:", error);
+      console.error("Error comparing bridges:", error);
+      showError("Failed to fetch bridge data. Please try again.");
     } finally {
-      this.showLoading(false);
+      setLoadingState(false);
     }
   }
 
-  displayResults(quotes, fromChain, toChain, amount, token) {
-    const resultsSection = document.getElementById("results");
-    const resultsContainer = document.getElementById("resultsContainer");
-    const savingsBadge = document.getElementById("savingsBadge");
-
+  // Display results
+  function displayResults(bridges, amount, token) {
     // Clear previous results
     resultsContainer.innerHTML = "";
 
-    if (!quotes || quotes.length === 0) {
-      resultsContainer.innerHTML =
-        "<p>No available bridges found for this route.</p>";
-      resultsSection.classList.remove("hidden");
-      return;
+    // Sort bridges by total cost
+    bridges.sort((a, b) => a.totalCost - b.totalCost);
+
+    // Calculate savings
+    if (bridges.length > 1) {
+      const cheapest = bridges[0].totalCost;
+      const mostExpensive = bridges[bridges.length - 1].totalCost;
+      const savings = (mostExpensive - cheapest).toFixed(2);
+
+      savingsBadge.textContent = `💰 Save up to ${savings}`;
+      savingsBadge.classList.remove("hidden");
     }
 
-    // Sort by total cost (ascending)
-    quotes.sort((a, b) => a.totalCost - b.totalCost);
-
-    // Calculate potential savings
-    if (quotes.length > 1) {
-      const bestPrice = quotes[0].totalCost;
-      const worstPrice = quotes[quotes.length - 1].totalCost;
-      const savings = (worstPrice - bestPrice).toFixed(2);
-
-      if (savings > 0) {
-        savingsBadge.textContent = `💰 Save up to $${savings}`;
-        savingsBadge.classList.remove("hidden");
-      }
-    }
-
-    // Display each bridge option
-    quotes.forEach((quote, index) => {
-      const card = this.createBridgeCard(
-        quote,
-        index === 0,
-        fromChain,
-        toChain,
-        amount,
-        token
-      );
+    // Create bridge cards
+    bridges.forEach((bridge, index) => {
+      const card = createBridgeCard(bridge, index === 0, amount, token);
       resultsContainer.appendChild(card);
     });
 
+    // Show results section
     resultsSection.classList.remove("hidden");
+
+    // Scroll to results
+    resultsSection.scrollIntoView({ behavior: "smooth" });
   }
 
-  createBridgeCard(quote, isBest, fromChain, toChain, amount, token) {
+  // Create bridge card element
+  function createBridgeCard(bridge, isBest, amount, token) {
     const card = document.createElement("div");
     card.className = `bridge-card ${isBest ? "best-option" : ""}`;
 
-    const estimatedTime = quote.estimatedTime || "5-20 mins";
-    const bridgeFee = quote.bridgeFee || 0;
-    const gasFee = quote.gasFee || 0;
-    const totalCost = quote.totalCost || bridgeFee + gasFee;
+    const icon = bridgeIcons[bridge.name.toLowerCase()] || "🌉";
 
     card.innerHTML = `
-            <div class="bridge-logo">${quote.icon || "🌉"}</div>
+            <div class="bridge-logo">
+                <span>${icon}</span>
+            </div>
             <div class="bridge-info">
-                <h3>${quote.bridge} ${isBest ? "✨ Best Option" : ""}</h3>
+                <h3>${bridge.name}</h3>
                 <div class="bridge-details">
-                    <span>⏱ ${estimatedTime}</span>
-                    <span>🔒 ${quote.security || "Trusted"}</span>
-                    <span>📊 ${quote.liquidity || "High Liquidity"}</span>
+                    <span>⏱️ ${bridge.estimatedTime || "5-10 mins"}</span>
+                    <span>${getSecurityBadge(bridge)}</span>
+                    <span>${getSpeedBadge(bridge)}</span>
                 </div>
             </div>
             <div class="fee-breakdown">
-                <div class="total-cost">$${totalCost.toFixed(2)}</div>
+                <div class="total-cost">${bridge.totalCost.toFixed(2)}</div>
                 <div class="fee-details">
-                    Bridge: $${bridgeFee.toFixed(2)} | Gas: $${gasFee.toFixed(
-      2
-    )}
+                    Bridge: ${bridge.bridgeFee.toFixed(
+                      2
+                    )} | Gas: ${bridge.gasFee.toFixed(2)}
                 </div>
             </div>
-            <button class="bridge-btn" onclick="window.open('${this.generateBridgeUrl(
-              quote,
-              fromChain,
-              toChain,
-              amount,
-              token
-            )}', '_blank')">
+            <button class="bridge-btn" data-bridge="${bridge.name}">
                 Use Bridge →
             </button>
         `;
 
+    // Add click handler for bridge button
+    const bridgeBtn = card.querySelector(".bridge-btn");
+    bridgeBtn.addEventListener("click", () => {
+      handleBridgeSelection(bridge, amount, token);
+    });
+
     return card;
   }
 
-  generateBridgeUrl(quote, fromChain, toChain, amount, token) {
-    // Add affiliate/revenue parameters to the bridge URL
-    const baseUrl = quote.url || "#";
-    const separator = baseUrl.includes("?") ? "&" : "?";
-
-    // These would be your actual affiliate parameters
-    const affiliateParams = {
-      "LI.FI": "ref=aggregator123",
-      Socket: "partner=bridgeagg",
-      Stargate: "affiliate=agg456",
-      Hop: "source=aggregator",
+  // Get security badge
+  function getSecurityBadge(bridge) {
+    const badges = {
+      high: "🔒 Audited",
+      medium: "🛡️ Secure",
+      low: "⚠️ Use Caution",
     };
-
-    const param = affiliateParams[quote.bridge] || "ref=default";
-    return `${baseUrl}${separator}${param}&from=${fromChain}&to=${toChain}&amount=${amount}&token=${token}`;
+    return badges[bridge.security] || badges["medium"];
   }
 
-  showLoading(show) {
-    const btn = document.getElementById("compareBtn");
-    const btnText = btn.querySelector(".btn-text");
-    const loader = btn.querySelector(".loader");
+  // Get speed badge
+  function getSpeedBadge(bridge) {
+    const badges = {
+      instant: "⚡ Instant",
+      fast: "🚀 Fast",
+      normal: "✓ Normal",
+      slow: "🐢 Slow",
+    };
+    return badges[bridge.speed] || badges["normal"];
+  }
 
-    if (show) {
-      btn.disabled = true;
-      btnText.textContent = "Fetching quotes";
+  // Handle bridge selection
+  function handleBridgeSelection(bridge, amount, token) {
+    // Track selection (analytics)
+    if (typeof gtag !== "undefined") {
+      gtag("event", "bridge_selected", {
+        bridge_name: bridge.name,
+        amount: amount,
+        token: token,
+      });
+    }
+
+    // Redirect to bridge (in production, this would open the bridge interface)
+    console.log(`Selected bridge: ${bridge.name}`);
+    showSuccess(`Redirecting to ${bridge.name}...`);
+
+    // In production, you would redirect to the actual bridge URL
+    // window.open(bridge.url, '_blank');
+  }
+
+  // Loading state management
+  function setLoadingState(isLoading) {
+    compareBtn.disabled = isLoading;
+    compareBtn.setAttribute("aria-busy", isLoading);
+
+    if (isLoading) {
+      btnText.textContent = "Comparing...";
       loader.classList.remove("hidden");
     } else {
-      btn.disabled = false;
       btnText.textContent = "Compare Bridges";
       loader.classList.add("hidden");
     }
   }
 
-  showError(message) {
+  // Message display functions
+  function showError(message) {
     const errorDiv = document.getElementById("errorMessage");
-    errorDiv.textContent = message;
+    const messageText = errorDiv.querySelector(".message-text");
+
+    if (!messageText) {
+      errorDiv.innerHTML = `
+                <span class="message-icon" aria-hidden="true">⚠️</span>
+                <span class="message-text">${message}</span>
+            `;
+    } else {
+      messageText.textContent = message;
+    }
+
     errorDiv.classList.remove("hidden");
+
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      errorDiv.classList.add("hidden");
+    }, 5000);
   }
 
-  hideError() {
-    document.getElementById("errorMessage").classList.add("hidden");
+  function showSuccess(message) {
+    const successDiv = document.getElementById("successMessage");
+    const messageText = successDiv.querySelector(".message-text");
+
+    if (!messageText) {
+      successDiv.innerHTML = `
+                <span class="message-icon" aria-hidden="true">✅</span>
+                <span class="message-text">${message}</span>
+            `;
+    } else {
+      messageText.textContent = message;
+    }
+
+    successDiv.classList.remove("hidden");
+
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+      successDiv.classList.add("hidden");
+    }, 3000);
   }
+
+  function hideMessages() {
+    document.getElementById("errorMessage").classList.add("hidden");
+    document.getElementById("successMessage").classList.add("hidden");
+  }
+
+  // Input validation
+  const amountInput = document.getElementById("amount");
+  amountInput.addEventListener("input", (e) => {
+    // Remove non-numeric characters except decimal point
+    e.target.value = e.target.value.replace(/[^0-9.]/g, "");
+
+    // Prevent multiple decimal points
+    const parts = e.target.value.split(".");
+    if (parts.length > 2) {
+      e.target.value = parts[0] + "." + parts.slice(1).join("");
+    }
+  });
+
+  // Chain selection validation
+  const fromChainSelect = document.getElementById("fromChain");
+  const toChainSelect = document.getElementById("toChain");
+
+  function validateChainSelection() {
+    if (fromChainSelect.value === toChainSelect.value) {
+      // Show visual feedback
+      toChainSelect.classList.add("error");
+      showError("Please select different chains for source and destination");
+    } else {
+      toChainSelect.classList.remove("error");
+      hideMessages();
+    }
+  }
+
+  fromChainSelect.addEventListener("change", validateChainSelection);
+  toChainSelect.addEventListener("change", validateChainSelection);
+});
+
+// Format numbers with commas
+function formatNumber(num) {
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-// Initialize the application
-document.addEventListener("DOMContentLoaded", () => {
-  new BridgeAggregator();
-});
+// Debounce function for input events
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
