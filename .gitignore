@@ -3,7 +3,7 @@ node_modules/
 .env
 .env.local
 .toml
-
+.yml
 # Build outputs
 dist/
 build/
