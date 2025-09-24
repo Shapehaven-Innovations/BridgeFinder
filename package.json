@@ -2,16 +2,27 @@
   "name": "bridge-aggregator",
   "version": "2.0.0",
   "description": "Modular cross-chain bridge aggregator",
+  "type": "module",
   "scripts": {
-    "dev": "node scripts/dev-server.js",
-    "build": "node scripts/build.js",
-    "deploy": "sh scripts/deploy.sh",
+    "dev": "npx live-server frontend --port=3000",
     "worker:dev": "cd worker && wrangler dev",
-    "worker:deploy": "cd worker && wrangler publish"
+    "worker:deploy": "cd worker && wrangler deploy",
+    "worker:tail": "cd worker && wrangler tail"
   },
   "devDependencies": {
-    "esbuild": "^0.19.0",
-    "live-server": "^1.2.2",
-    "dotenv": "^16.3.1"
-  }
+    "wrangler": "^3.0.0",
+    "live-server": "^1.2.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/bridgefinder.git"
+  },
+  "keywords": [
+    "blockchain",
+    "bridge",
+    "cross-chain",
+    "web3"
+  ],
+  "author": "",
+  "license": "MIT"
 }

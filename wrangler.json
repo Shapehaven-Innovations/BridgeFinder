@@ -2,9 +2,12 @@
   "name": "bridge-aggregator-api",
   "main": "worker/index.js",
   "compatibility_date": "2024-01-01",
-  "workers_dev": true,
+  "workers_dev": false,
   "vars": {
-    "ENVIRONMENT": "production"
+    "ENVIRONMENT": "production",
+    "INTEGRATOR_NAME": "BridgeFinder",
+    "FEE_PERCENTAGE": "0.003",
+    "FEE_RECEIVER_ADDRESS": "0xYOUR_WALLET_ADDRESS_HERE"
   },
   "env": {
     "production": {
