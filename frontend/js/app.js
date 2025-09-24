@@ -4,7 +4,7 @@ import { Config } from "./config.js";
 import { ApiClient } from "./api.js";
 import { StateManager } from "./utils/StateManager.js";
 import { BridgeCard } from "./components/BridgeCard.js";
-import { Toast } from "./components/Toast.js";
+import { Toast } from "./components/Toast.js"; // Make sure this import exists
 import { AnalyticsPlugin } from "./plugins/AnalyticsPlugin.js";
 import { PriceAlertPlugin } from "./plugins/PriceAlertPlugin.js";
 
@@ -21,8 +21,11 @@ class BridgeApp {
     this.bindEvents();
     this.loadPlugins();
     this.initTheme();
-  }
 
+    Toast.init({
+      container: document.getElementById("toasts"),
+    });
+  }
   render() {
     document.getElementById("app").innerHTML = `
             <div class="container">

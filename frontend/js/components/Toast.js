@@ -6,13 +6,17 @@ export class Toast {
   static counter = 0;
 
   static init(options) {
-    Toast.container = options.container;
+    Toast.container = options.container || document.getElementById("toasts");
   }
 
   static show(message, type = "info", duration = 3000) {
     if (!Toast.container) {
-      console.warn("Toast container not initialized");
-      return;
+      // Try to find container if not initialized
+      Toast.container = document.getElementById("toasts");
+      if (!Toast.container) {
+        console.warn("Toast container not found");
+        return;
+      }
     }
 
     const id = ++Toast.counter;
@@ -28,10 +32,10 @@ export class Toast {
     };
 
     toast.innerHTML = `
-            <span class="toast-icon">${icons[type]}</span>
-            <span class="toast-message">${message}</span>
-            <button class="toast-close" data-toast-id="${id}">✕</button>
-        `;
+      <span class="toast-icon">${icons[type]}</span>
+      <span class="toast-message">${message}</span>
+      <button class="toast-close" data-toast-id="${id}">✕</button>
+    `;
 
     Toast.container.appendChild(toast);
     Toast.toasts.set(id, toast);
