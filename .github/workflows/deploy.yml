@@ -28,15 +28,10 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      # Copy frontend contents to root for upload
-      - name: Prepare files
-        run: |
-          cp -r frontend/* .
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "."
+          path: "./frontend"
 
       - name: Deploy to GitHub Pages
         id: deployment
