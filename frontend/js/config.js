@@ -1,12 +1,6 @@
-// frontend/js/config.js - Application Configuration
-// Configuration
-
 export const Config = {
   // Use your Cloudflare Worker URL
-  apiUrl:
-    window.location.hostname === "localhost"
-      ? "http://localhost:8787"
-      : "https://bridge-aggregator-api.shapehaveninnovations.workers.dev",
+  apiUrl: "https://bridge-aggregator-api.shapehaveninnovations.workers.dev",
 
   chains: {
     1: { name: "Ethereum", icon: "🔷", chainId: "0x1" },
