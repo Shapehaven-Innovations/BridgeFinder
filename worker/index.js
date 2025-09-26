@@ -77,7 +77,7 @@ const TOKENS = {
   USDC: {
     address: {
       1: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-      137: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+      137: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
       42161: "0xff970a61a04b1ca14834a43f5de4533ebddb5cc8",
       10: "0x7f5c764cbc14f9669b88837ca1490cca17c31607",
       56: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
@@ -274,6 +274,17 @@ async function handleCompare(request, env, headers) {
         JSON.stringify({
           success: false,
           error: "No routes available for this pair",
+          debug: {
+            fromChainId,
+            toChainId,
+            token,
+            amount,
+            tokenConfig: TOKENS[token],
+            quotesAttempted: quotes.length,
+            failures: quotes
+              .filter((r) => r.status === "rejected")
+              .map((r) => r.reason?.message),
+          },
           bridges: [],
         }),
         { headers }
@@ -363,6 +374,7 @@ async function fetchLiFiQuote(fromChainId, toChainId, token, amount, env) {
       params.append("fee", env.FEE_PERCENTAGE || "0.003");
       params.append("referrer", env.FEE_RECEIVER_ADDRESS);
     }
+    console.log("LiFi request URL:", `https://li.quest/v1/quote?${params}`);
 
     // Make API request with API key from Cloudflare secrets
     const response = await fetch(`https://li.quest/v1/quote?${params}`, {
@@ -373,7 +385,8 @@ async function fetchLiFiQuote(fromChainId, toChainId, token, amount, env) {
     });
 
     if (!response.ok) {
-      console.error("LI.FI error:", response.status);
+      console.log("LiFi request URL:", `https://li.quest/v1/quote?${params}`);
+      console.error("LI.FI error:", response.status, errorText);
       return null;
     }
 
