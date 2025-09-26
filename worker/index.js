@@ -64,8 +64,14 @@ const CHAINS = {
 
 const TOKENS = {
   ETH: {
-    address: "0x0000000000000000000000000000000000000000",
+    address: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
     decimals: 18,
+    137: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
+    42161: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    10: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    56: "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
+    43114: "0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab",
+    8453: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
     symbol: "ETH",
   },
   USDC: {
