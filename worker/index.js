@@ -77,7 +77,7 @@ const TOKENS = {
   USDC: {
     address: {
       1: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-      137: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
+      137: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
       42161: "0xff970a61a04b1ca14834a43f5de4533ebddb5cc8",
       10: "0x7f5c764cbc14f9669b88837ca1490cca17c31607",
       56: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
