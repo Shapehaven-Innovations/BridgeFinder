@@ -65,13 +65,15 @@ const CHAINS = {
 const TOKENS = {
   ETH: {
     address: {
-     1: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-     137: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
-     42161: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-     10: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-     56: "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
-     43114: "0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab",
-     8453: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      1: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      137: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
+      42161: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      10: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      56: "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
+      43114: "0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab",
+      8453: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    },
+    decimals: 18,
     symbol: "ETH",
   },
   USDC: {
@@ -339,7 +341,9 @@ async function handleCompare(request, env, headers) {
 async function fetchLiFiQuote(fromChainId, toChainId, token, amount, env) {
   try {
     const tokenConfig = TOKENS[token];
-    console.log(`LiFi: Fetching quote for ${token} from chain ${fromChainId} to ${toChainId}, amount: ${amount}`);
+    console.log(
+      `LiFi: Fetching quote for ${token} from chain ${fromChainId} to ${toChainId}, amount: ${amount}`
+    );
     if (!tokenConfig) return null;
 
     // Get token addresses for source and destination chains
