@@ -64,14 +64,14 @@ const CHAINS = {
 
 const TOKENS = {
   ETH: {
-    address: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-    decimals: 18,
-    137: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
-    42161: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-    10: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-    56: "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
-    43114: "0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab",
-    8453: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    address: {
+     1: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+     137: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
+     42161: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+     10: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+     56: "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
+     43114: "0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab",
+     8453: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
     symbol: "ETH",
   },
   USDC: {
@@ -339,6 +339,7 @@ async function handleCompare(request, env, headers) {
 async function fetchLiFiQuote(fromChainId, toChainId, token, amount, env) {
   try {
     const tokenConfig = TOKENS[token];
+    console.log(`LiFi: Fetching quote for ${token} from chain ${fromChainId} to ${toChainId}, amount: ${amount}`);
     if (!tokenConfig) return null;
 
     // Get token addresses for source and destination chains
@@ -385,12 +386,18 @@ async function fetchLiFiQuote(fromChainId, toChainId, token, amount, env) {
     });
 
     if (!response.ok) {
-      console.log("LiFi request URL:", `https://li.quest/v1/quote?${params}`);
-      console.error("LI.FI error:", response.status, errorText);
+      const errorBody = await response.text();
+      console.error("LI.FI error:", response.status);
+      console.error("LI.FI error body:", errorBody);
       return null;
     }
 
     const data = await response.json();
+    console.log("LiFi response data:", JSON.stringify(data).slice(0, 500));
+    if (!data.estimate) {
+      console.error("LiFi: No estimate in response");
+      return null;
+    }
 
     // Extract cost information from response
     const estimate = data.estimate || {};
