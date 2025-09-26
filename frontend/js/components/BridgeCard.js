@@ -1,7 +1,5 @@
 // frontend/js/components/BridgeCard.js
 
-// frontend/js/components/BridgeCard.js
-
 export class BridgeCard {
   static render(bridge, isBest = false) {
     const card = `
