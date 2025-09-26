@@ -1,7 +1,6 @@
-// worker/index.js - Complete Bridge Aggregator API with Monetization
-
+// worker/index.js - Production Bridge Aggregator API with Real Integrations
 // ============================================
-// CONFIGURATION & CONSTANTS
+// CHAIN & TOKEN CONFIGURATIONS
 // ============================================
 
 const CHAINS = {
@@ -75,7 +74,9 @@ const TOKENS = {
       137: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
       42161: "0xff970a61a04b1ca14834a43f5de4533ebddb5cc8",
       10: "0x7f5c764cbc14f9669b88837ca1490cca17c31607",
-      default: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      56: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+      43114: "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
+      8453: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
     },
     decimals: 6,
     symbol: "USDC",
@@ -84,7 +85,11 @@ const TOKENS = {
     address: {
       1: "0xdac17f958d2ee523a2206206994597c13d831ec7",
       137: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
-      default: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      56: "0x55d398326f99059ff775485246999027b3197955",
+      42161: "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9",
+      10: "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58",
+      43114: "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
+      8453: "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
     },
     decimals: 6,
     symbol: "USDT",
@@ -93,7 +98,11 @@ const TOKENS = {
     address: {
       1: "0x6b175474e89094c44da98b954eedeac495271d0f",
       137: "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063",
-      default: "0x6b175474e89094c44da98b954eedeac495271d0f",
+      42161: "0xda10009cbd5d07dd0cecc66161fc93d7c9000da1",
+      10: "0xda10009cbd5d07dd0cecc66161fc93d7c9000da1",
+      56: "0x1af3f329e8be154074d8769d1ffa4ee058b1dbc3",
+      43114: "0xd586e7f844cea2f87f50152665bcbc2c279d8d70",
+      8453: "0x50c5725949a6f0c72e6c4a641f24049a917db0cb",
     },
     decimals: 18,
     symbol: "DAI",
@@ -102,7 +111,11 @@ const TOKENS = {
     address: {
       1: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
       137: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
-      default: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      42161: "0x82af49447d8a07e3bd95bd0d56f35241523fbab1",
+      10: "0x4200000000000000000000000000000000000006",
+      56: "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
+      43114: "0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab",
+      8453: "0x4200000000000000000000000000000000000006",
     },
     decimals: 18,
     symbol: "WETH",
@@ -110,37 +123,15 @@ const TOKENS = {
   WBTC: {
     address: {
       1: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-      default: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      137: "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6",
+      42161: "0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f",
+      10: "0x68f180fcce6836688e9084f035309e29bf0a2095",
+      56: "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
+      43114: "0x50b7545627a5162f82a992c33b87adc75187b218",
+      8453: "0x236aa50979d5f3de3bd1eeb40e81137f22ab794b",
     },
     decimals: 8,
     symbol: "WBTC",
-  },
-};
-
-const API_CONFIG = {
-  LIFI: {
-    url: "https://li.quest/v1/quote",
-    name: "LI.FI",
-    icon: "🔷",
-    priority: 1,
-  },
-  SOCKET: {
-    url: "https://api.socket.tech/v2/quote",
-    name: "Socket",
-    icon: "🔌",
-    priority: 2,
-  },
-  ZEROX: {
-    url: "https://api.0x.org/swap/v1/quote",
-    name: "0x",
-    icon: "0️⃣",
-    priority: 3,
-  },
-  ONEINCH: {
-    url: "https://api.1inch.exchange/v5.0",
-    name: "1inch",
-    icon: "🦄",
-    priority: 4,
   },
 };
 
@@ -198,7 +189,7 @@ export default {
       return new Response(
         JSON.stringify({
           error: "Internal server error",
-          message: env.ENVIRONMENT === "staging" ? error.message : undefined,
+          message: error.message,
         }),
         { status: 500, headers: corsHeaders }
       );
@@ -230,74 +221,68 @@ async function handleCompare(request, env, headers) {
       );
     }
 
-    // Fetch quotes from all providers
+    // ============================================
+    // FETCH QUOTES FROM ALL PROVIDERS IN PARALLEL
+    // ============================================
     const quotePromises = [];
 
+    // Provider 1: LI.FI (uses API key from Cloudflare secrets)
     if (env.LIFI_API_KEY) {
       quotePromises.push(
         fetchLiFiQuote(fromChainId, toChainId, token, amount, env)
       );
     }
 
-    if (env.SOCKET_API_KEY) {
-      quotePromises.push(
-        fetchSocketQuote(fromChainId, toChainId, token, amount, env)
-      );
-    }
+    // Provider 2: Jumper (free, no API key needed)
+    quotePromises.push(
+      fetchJumperQuote(fromChainId, toChainId, token, amount, env)
+    );
 
-    if (env.ZEROX_API_KEY) {
-      quotePromises.push(
-        fetch0xQuote(fromChainId, toChainId, token, amount, env)
-      );
-    }
+    // Provider 3: Socket (free public API)
+    quotePromises.push(
+      fetchSocketQuote(fromChainId, toChainId, token, amount, env)
+    );
 
-    if (env.ONE_INCH_API_KEY) {
-      quotePromises.push(
-        fetch1inchQuote(fromChainId, toChainId, token, amount, env)
-      );
-    }
+    // Provider 4: Squid Router (free public API)
+    quotePromises.push(
+      fetchSquidQuote(fromChainId, toChainId, token, amount, env)
+    );
 
-    // Use mock data if no API keys configured
-    if (quotePromises.length === 0) {
-      console.log("No API keys configured, using mock data");
-      return new Response(
-        JSON.stringify({
-          success: true,
-          bridges: generateMockBridges(amount),
-          timestamp: new Date().toISOString(),
-          notice: "Demo mode - Configure API keys for real quotes",
-        }),
-        { headers }
-      );
-    }
+    // TO ADD MORE PROVIDERS:
+    // 1. Create a new fetch function below (e.g., fetchNewProviderQuote)
+    // 2. Add it here: quotePromises.push(fetchNewProviderQuote(...))
+    // 3. Follow the same return format as other providers
 
+    // Wait for all providers to respond
     const quotes = await Promise.allSettled(quotePromises);
 
+    // Process and filter valid quotes
     const bridges = quotes
       .filter((result) => result.status === "fulfilled" && result.value)
       .map((result) => result.value)
       .filter((bridge) => bridge !== null && bridge.totalCost > 0)
       .sort((a, b) => a.totalCost - b.totalCost);
 
-    // Fallback to mock if all APIs fail
     if (bridges.length === 0) {
-      console.log("All API calls failed, using mock data");
       return new Response(
         JSON.stringify({
-          success: true,
-          bridges: generateMockBridges(amount),
-          timestamp: new Date().toISOString(),
-          notice: "Real-time quotes unavailable - showing estimated costs",
+          success: false,
+          error: "No routes available for this pair",
+          bridges: [],
         }),
         { headers }
       );
     }
 
-    // Add referral links
-    const bridgesWithReferral = bridges.map((bridge) => ({
+    // Add referral/monetization links
+    const bridgesWithReferral = bridges.map((bridge, index) => ({
       ...bridge,
       url: generateReferralUrl(bridge, env),
-      saveAmount: bridges[bridges.length - 1].totalCost - bridge.totalCost,
+      isBest: index === 0,
+      saveAmount:
+        index > 0
+          ? bridges[bridges.length - 1].totalCost - bridge.totalCost
+          : 0,
     }));
 
     return new Response(
@@ -315,7 +300,7 @@ async function handleCompare(request, env, headers) {
     return new Response(
       JSON.stringify({
         error: "Failed to compare bridges",
-        details: env.ENVIRONMENT === "staging" ? error.message : undefined,
+        details: error.message,
       }),
       { status: 500, headers }
     );
@@ -325,35 +310,59 @@ async function handleCompare(request, env, headers) {
 // ============================================
 // BRIDGE PROVIDER INTEGRATIONS
 // ============================================
+// Each function fetches real quotes from a specific bridge provider
+// Returns standardized format: name, icon, provider, costs, timing, etc.
+// ============================================
 
+// ============================================
+// PROVIDER 1: LI.FI
+// Requires API key (stored in Cloudflare Workers secrets)
+// Docs: https://docs.li.fi/li.fi-api/li.fi-api
+// ============================================
 async function fetchLiFiQuote(fromChainId, toChainId, token, amount, env) {
   try {
-    const tokenConfig = TOKENS[token] || TOKENS["USDC"];
-    const tokenAddress =
+    const tokenConfig = TOKENS[token];
+    if (!tokenConfig) return null;
+
+    // Get token addresses for source and destination chains
+    const fromTokenAddress =
       typeof tokenConfig.address === "object"
-        ? tokenConfig.address[fromChainId] || tokenConfig.address.default
+        ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
         : tokenConfig.address;
 
+    const toTokenAddress =
+      typeof tokenConfig.address === "object"
+        ? tokenConfig.address[toChainId] || tokenConfig.address[1]
+        : tokenConfig.address;
+
+    // Convert amount to smallest unit (wei/gwei)
     const amountInWei = Math.floor(
       parseFloat(amount) * Math.pow(10, tokenConfig.decimals)
     ).toString();
 
+    // Build request parameters
     const params = new URLSearchParams({
-      fromChain: CHAINS[fromChainId]?.lifiId || fromChainId,
-      toChain: CHAINS[toChainId]?.lifiId || toChainId,
-      fromToken: tokenAddress,
-      toToken: tokenAddress,
+      fromChain: fromChainId,
+      toChain: toChainId,
+      fromToken: fromTokenAddress,
+      toToken: toTokenAddress,
       fromAmount: amountInWei,
       slippage: "0.005",
-      integrator: env.INTEGRATOR_NAME,
-      fee: env.FEE_PERCENTAGE,
-      referrer: env.FEE_RECEIVER_ADDRESS,
+      integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
+      allowDestinationCall: "false",
     });
 
-    const response = await fetch(`${API_CONFIG.LIFI.url}?${params}`, {
+    // Add monetization parameters if configured
+    if (env.FEE_RECEIVER_ADDRESS) {
+      params.append("fee", env.FEE_PERCENTAGE || "0.003");
+      params.append("referrer", env.FEE_RECEIVER_ADDRESS);
+    }
+
+    // Make API request with API key from Cloudflare secrets
+    const response = await fetch(`https://li.quest/v1/quote?${params}`, {
       headers: {
         Accept: "application/json",
-        "x-lifi-api-key": env.LIFI_API_KEY || "",
+        "x-lifi-api-key": env.LIFI_API_KEY, // From Cloudflare Workers secrets
       },
     });
 
@@ -363,22 +372,33 @@ async function fetchLiFiQuote(fromChainId, toChainId, token, amount, env) {
     }
 
     const data = await response.json();
-    const gasCostUSD = parseFloat(data.estimate?.gasCosts?.usd || "3");
-    const feeCostUSD = parseFloat(data.estimate?.feeCosts?.usd || "2");
+
+    // Extract cost information from response
+    const estimate = data.estimate || {};
+    const gasCostUSD = parseFloat(estimate.gasCosts?.[0]?.amountUSD || "0");
+    const feeCostUSD = parseFloat(estimate.feeCosts?.[0]?.amountUSD || "0");
+    const slippageUSD = Math.abs(
+      parseFloat(estimate.toAmountUSD || "0") -
+        parseFloat(estimate.fromAmountUSD || "0")
+    );
+
+    const totalCost =
+      gasCostUSD + feeCostUSD + (slippageUSD > 0 ? slippageUSD : 0);
 
     return {
-      name: API_CONFIG.LIFI.name,
-      icon: API_CONFIG.LIFI.icon,
+      name: "LI.FI",
+      icon: "🔷",
       provider: "lifi",
-      totalCost: gasCostUSD + feeCostUSD,
+      totalCost: totalCost || 5,
       bridgeFee: feeCostUSD,
       gasFee: gasCostUSD,
       estimatedTime: `${Math.ceil(
-        (data.estimate?.executionDuration || 300) / 60
+        (estimate.executionDuration || 300) / 60
       )} mins`,
       security: "Audited",
       liquidity: "High",
-      route: "Best Route",
+      route: data.toolDetails?.name || "Best Route",
+      outputAmount: estimate.toAmount || null,
     };
   } catch (error) {
     console.error("LI.FI fetch error:", error);
@@ -386,60 +406,152 @@ async function fetchLiFiQuote(fromChainId, toChainId, token, amount, env) {
   }
 }
 
-async function fetchSocketQuote(fromChainId, toChainId, token, amount, env) {
+// ============================================
+// PROVIDER 2: JUMPER EXCHANGE
+// Free API, no key required
+// Powered by LI.FI infrastructure
+// Docs: https://docs.jumper.exchange/
+// ============================================
+async function fetchJumperQuote(fromChainId, toChainId, token, amount, env) {
   try {
-    const tokenConfig = TOKENS[token] || TOKENS["USDC"];
-    const tokenAddress =
+    const tokenConfig = TOKENS[token];
+    if (!tokenConfig) return null;
+
+    const fromTokenAddress =
       typeof tokenConfig.address === "object"
-        ? tokenConfig.address[fromChainId] || tokenConfig.address.default
+        ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
+        : tokenConfig.address;
+
+    const toTokenAddress =
+      typeof tokenConfig.address === "object"
+        ? tokenConfig.address[toChainId] || tokenConfig.address[1]
         : tokenConfig.address;
 
     const amountInWei = Math.floor(
       parseFloat(amount) * Math.pow(10, tokenConfig.decimals)
     ).toString();
 
-    const requestBody = {
-      fromChainId: CHAINS[fromChainId]?.socketId || fromChainId,
-      toChainId: CHAINS[toChainId]?.socketId || toChainId,
-      fromTokenAddress: tokenAddress,
-      toTokenAddress: tokenAddress,
+    // Jumper uses LI.FI's advanced routes endpoint (free access)
+    const params = new URLSearchParams({
+      fromChain: fromChainId,
+      toChain: toChainId,
+      fromToken: fromTokenAddress,
+      toToken: toTokenAddress,
       fromAmount: amountInWei,
-      userAddress: env.FEE_RECEIVER_ADDRESS,
-      partnerId: env.INTEGRATOR_NAME,
-      feePercent: parseFloat(env.FEE_PERCENTAGE) * 100,
-      sort: "output",
-    };
-
-    const response = await fetch(API_CONFIG.SOCKET.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "API-KEY": env.SOCKET_API_KEY || "",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(requestBody),
+      slippage: "0.5",
+      integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
     });
 
-    if (!response.ok) {
-      console.error("Socket error:", response.status);
-      return null;
-    }
+    const response = await fetch(
+      `https://li.quest/v1/advanced/routes?${params}`,
+      {
+        headers: {
+          Accept: "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const route = data.routes?.[0];
+    if (!route) return null;
+
+    // Extract costs from route data
+    const gasCostUSD = parseFloat(route.gasCostUSD || "3");
+    const steps = route.steps || [];
+    const totalFeeCost = steps.reduce((sum, step) => {
+      return sum + parseFloat(step.estimate?.feeCosts?.[0]?.amountUSD || "0");
+    }, 0);
+
+    return {
+      name: "Jumper",
+      icon: "🦘",
+      provider: "jumper",
+      totalCost: gasCostUSD + totalFeeCost + 2,
+      bridgeFee: totalFeeCost + 2,
+      gasFee: gasCostUSD,
+      estimatedTime: `${Math.ceil(
+        (route.steps?.[0]?.estimate?.executionDuration || 300) / 60
+      )} mins`,
+      security: "Verified",
+      liquidity: "High",
+      route: route.steps?.[0]?.toolDetails?.name || "Jumper Route",
+    };
+  } catch (error) {
+    console.error("Jumper fetch error:", error);
+    return null;
+  }
+}
+
+// ============================================
+// PROVIDER 3: SOCKET
+// Free public API, no authentication required
+// Docs: https://docs.socket.tech/socket-api/v2
+// ============================================
+async function fetchSocketQuote(fromChainId, toChainId, token, amount, env) {
+  try {
+    const tokenConfig = TOKENS[token];
+    if (!tokenConfig) return null;
+
+    const fromTokenAddress =
+      typeof tokenConfig.address === "object"
+        ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
+        : tokenConfig.address;
+
+    const toTokenAddress =
+      typeof tokenConfig.address === "object"
+        ? tokenConfig.address[toChainId] || tokenConfig.address[1]
+        : tokenConfig.address;
+
+    const amountInWei = Math.floor(
+      parseFloat(amount) * Math.pow(10, tokenConfig.decimals)
+    ).toString();
+
+    // Socket v2 public quote endpoint
+    const params = new URLSearchParams({
+      fromChainId: fromChainId,
+      fromTokenAddress: fromTokenAddress,
+      toChainId: toChainId,
+      toTokenAddress: toTokenAddress,
+      fromAmount: amountInWei,
+      userAddress:
+        env.FEE_RECEIVER_ADDRESS ||
+        "0x0000000000000000000000000000000000000000",
+      uniqueRoutesPerBridge: "true",
+      sort: "output",
+      singleTxOnly: "false",
+    });
+
+    const response = await fetch(`https://api.socket.tech/v2/quote?${params}`, {
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) return null;
 
     const data = await response.json();
     const route = data.result?.routes?.[0];
     if (!route) return null;
 
+    // Extract fee information
+    const totalGas = parseFloat(route.totalGasFeesInUsd || "0");
+    const bridgeFee = parseFloat(
+      route.userTxs?.[0]?.protocolFees?.feesInUsd || "0"
+    );
+
     return {
-      name: API_CONFIG.SOCKET.name,
-      icon: API_CONFIG.SOCKET.icon,
+      name: "Socket",
+      icon: "🔌",
       provider: "socket",
-      totalCost: parseFloat(route.totalGasFeesInUsd || "5"),
-      bridgeFee: parseFloat(route.bridgeFee?.feesInUsd || "2"),
-      gasFee: parseFloat(route.gasFees?.feesInUsd || "3"),
+      totalCost: totalGas + bridgeFee || 5,
+      bridgeFee: bridgeFee,
+      gasFee: totalGas,
       estimatedTime: `${Math.ceil((route.serviceTime || 360) / 60)} mins`,
       security: "Multi-sig",
       liquidity: "High",
-      route: "Direct",
+      route: route.usedBridgeNames?.join(" → ") || "Socket Bridge",
     };
   } catch (error) {
     console.error("Socket fetch error:", error);
@@ -447,184 +559,162 @@ async function fetchSocketQuote(fromChainId, toChainId, token, amount, env) {
   }
 }
 
-async function fetch0xQuote(fromChainId, toChainId, token, amount, env) {
+// ============================================
+// PROVIDER 4: SQUID ROUTER
+// Free public API for basic quotes
+// Docs: https://docs.squidrouter.com/
+// ============================================
+async function fetchSquidQuote(fromChainId, toChainId, token, amount, env) {
   try {
-    // 0x only works on select chains
-    if (!["1", "137", "42161", "10", "56", "8453"].includes(fromChainId)) {
-      return null;
+    const tokenConfig = TOKENS[token];
+    if (!tokenConfig) return null;
+
+    // Squid uses different chain IDs, map them
+    const squidChainMap = {
+      1: "Ethereum",
+      137: "Polygon",
+      42161: "Arbitrum",
+      10: "Optimism",
+      56: "binance",
+      43114: "Avalanche",
+      8453: "base",
+    };
+
+    if (!squidChainMap[fromChainId] || !squidChainMap[toChainId]) {
+      return null; // Chain not supported by Squid
     }
 
-    const tokenConfig = TOKENS[token] || TOKENS["USDC"];
-    const tokenAddress =
+    const fromTokenAddress =
       typeof tokenConfig.address === "object"
-        ? tokenConfig.address[fromChainId] || tokenConfig.address.default
+        ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
         : tokenConfig.address;
 
-    const amountInWei = Math.floor(
-      parseFloat(amount) * Math.pow(10, tokenConfig.decimals)
-    ).toString();
+    const toTokenAddress =
+      typeof tokenConfig.address === "object"
+        ? tokenConfig.address[toChainId] || tokenConfig.address[1]
+        : tokenConfig.address;
 
-    const params = new URLSearchParams({
-      sellToken: tokenAddress,
-      buyToken: tokenAddress,
-      sellAmount: amountInWei,
-      slippagePercentage: "0.005",
-      affiliateAddress: env.FEE_RECEIVER_ADDRESS,
-      buyTokenPercentageFee: env.FEE_PERCENTAGE,
+    // Squid public route endpoint
+    const requestBody = {
+      fromChain: squidChainMap[fromChainId],
+      toChain: squidChainMap[toChainId],
+      fromToken: fromTokenAddress,
+      toToken: toTokenAddress,
+      fromAmount: (
+        parseFloat(amount) * Math.pow(10, tokenConfig.decimals)
+      ).toString(),
+      slippage: 1,
+      enableExpress: true,
+      prefer: ["FASTEST"],
+    };
+
+    const response = await fetch("https://api.squidrouter.com/v1/route", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(requestBody),
     });
 
-    const chainPath = fromChainId === "1" ? "" : `/${fromChainId}`;
-    const response = await fetch(
-      `https://api.0x.org${chainPath}/swap/v1/quote?${params}`,
-      {
-        headers: {
-          Accept: "application/json",
-          "0x-api-key": env.ZEROX_API_KEY || "",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      console.error("0x error:", response.status);
-      return null;
-    }
+    if (!response.ok) return null;
 
     const data = await response.json();
-    const gasPrice = parseFloat(data.gasPrice || "20000000000") / 1e9;
-    const gasEstimate = parseFloat(data.estimatedGas || "200000");
-    const ethPrice = 2500; // Would fetch from price API in production
-    const gasCostUSD = (gasEstimate * gasPrice * ethPrice) / 1e9;
+    const route = data.route;
+    if (!route) return null;
+
+    // Parse Squid response
+    const gasCost = parseFloat(route.estimate?.gasCosts?.[0]?.amountUSD || "3");
+    const feeCost = parseFloat(route.estimate?.feeCosts?.[0]?.amountUSD || "2");
+    const totalCost = parseFloat(
+      route.estimate?.totalCostUSD || gasCost + feeCost
+    );
 
     return {
-      name: API_CONFIG.ZEROX.name,
-      icon: API_CONFIG.ZEROX.icon,
-      provider: "0x",
-      totalCost: gasCostUSD + 2.0,
-      bridgeFee: 2.0,
-      gasFee: gasCostUSD,
+      name: "Squid",
+      icon: "🦑",
+      provider: "squid",
+      totalCost: totalCost || 5,
+      bridgeFee: feeCost,
+      gasFee: gasCost,
+      estimatedTime: `${Math.ceil(
+        (route.estimate?.estimatedRouteDuration || 420) / 60
+      )} mins`,
+      security: "Axelar Network",
+      liquidity: "Medium",
+      route: route.estimate?.routeType || "Squid Route",
+    };
+  } catch (error) {
+    console.error("Squid fetch error:", error);
+    return null;
+  }
+}
+
+// ============================================
+// TO ADD A NEW PROVIDER:
+// ============================================
+// 1. Copy this template function below
+// 2. Update the API endpoint and parameters
+// 3. Add the function call in handleCompare above
+// ============================================
+/*
+async function fetchNewProviderQuote(fromChainId, toChainId, token, amount, env) {
+  try {
+    const tokenConfig = TOKENS[token];
+    if (!tokenConfig) return null;
+
+    // Get token addresses
+    const fromTokenAddress = typeof tokenConfig.address === "object"
+      ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
+      : tokenConfig.address;
+
+    // Make API call to provider
+    const response = await fetch("PROVIDER_API_URL", {
+      // Add request configuration
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json();
+
+    // Return standardized format
+    return {
+      name: "Provider Name",
+      icon: "🌉",
+      provider: "providername",
+      totalCost: 5,  // Total cost in USD
+      bridgeFee: 2,  // Bridge fee in USD
+      gasFee: 3,     // Gas fee in USD
       estimatedTime: "5 mins",
       security: "Audited",
       liquidity: "High",
-      route: "0x Aggregation",
+      route: "Route Name",
     };
   } catch (error) {
-    console.error("0x fetch error:", error);
+    console.error("Provider fetch error:", error);
     return null;
   }
 }
-
-async function fetch1inchQuote(fromChainId, toChainId, token, amount, env) {
-  try {
-    const chainMap = {
-      1: "1",
-      10: "10",
-      56: "56",
-      137: "137",
-      8453: "8453",
-      42161: "42161",
-      43114: "43114",
-    };
-
-    if (!chainMap[fromChainId]) return null;
-
-    const tokenConfig = TOKENS[token] || TOKENS["USDC"];
-    const tokenAddress =
-      typeof tokenConfig.address === "object"
-        ? tokenConfig.address[fromChainId] || tokenConfig.address.default
-        : tokenConfig.address;
-
-    const amountInWei = Math.floor(
-      parseFloat(amount) * Math.pow(10, tokenConfig.decimals)
-    ).toString();
-
-    const params = new URLSearchParams({
-      src: tokenAddress,
-      dst: tokenAddress,
-      amount: amountInWei,
-      from: env.FEE_RECEIVER_ADDRESS,
-      slippage: "0.5",
-      referrer: env.FEE_RECEIVER_ADDRESS,
-      fee: parseFloat(env.FEE_PERCENTAGE) * 100,
-    });
-
-    const response = await fetch(
-      `${API_CONFIG.ONEINCH.url}/${chainMap[fromChainId]}/quote?${params}`,
-      {
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${env.ONE_INCH_API_KEY || ""}`,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      console.error("1inch error:", response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    const estimatedGas = parseFloat(data.estimatedGas || "250000");
-    const gasCostUSD = (estimatedGas * 50 * 2500) / 1e18;
-
-    return {
-      name: API_CONFIG.ONEINCH.name,
-      icon: API_CONFIG.ONEINCH.icon,
-      provider: "1inch",
-      totalCost: gasCostUSD + 2.5,
-      bridgeFee: 2.5,
-      gasFee: gasCostUSD,
-      estimatedTime: "7 mins",
-      security: "Audited",
-      liquidity: "High",
-      route: "1inch Fusion",
-    };
-  } catch (error) {
-    console.error("1inch fetch error:", error);
-    return null;
-  }
-}
+*/
 
 // ============================================
 // UTILITY FUNCTIONS
 // ============================================
 
-function generateMockBridges(amount) {
-  const providers = [
-    { name: "LI.FI", icon: "🔷", provider: "lifi" },
-    { name: "Socket", icon: "🔌", provider: "socket" },
-    { name: "1inch", icon: "🦄", provider: "1inch" },
-    { name: "0x", icon: "0️⃣", provider: "0x" },
-  ];
-
-  return providers
-    .map((provider, index) => {
-      const baseFee = 2 + index * 0.5;
-      const gasFee = 1 + Math.random();
-
-      return {
-        ...provider,
-        totalCost: +(baseFee + gasFee).toFixed(2),
-        bridgeFee: baseFee,
-        gasFee: +gasFee.toFixed(2),
-        estimatedTime: `${5 + index * 2} mins`,
-        security: "Demo Mode",
-        liquidity: "Simulated",
-        route: "Mock Route",
-        url: "#",
-      };
-    })
-    .sort((a, b) => a.totalCost - b.totalCost);
-}
-
+// Generate referral URLs for monetization
 function generateReferralUrl(bridge, env) {
+  const referralId =
+    env.FEE_RECEIVER_ADDRESS || env.INTEGRATOR_NAME || "bridgeaggregator";
+
+  // Each provider has different referral URL formats
   const baseUrls = {
-    lifi: `https://jumper.exchange/?integrator=${env.INTEGRATOR_NAME}`,
-    socket: `https://socketbridge.com/?ref=${env.INTEGRATOR_NAME}`,
-    "0x": `https://matcha.xyz/?ref=${env.FEE_RECEIVER_ADDRESS}`,
-    "1inch": `https://app.1inch.io/?ref=${env.FEE_RECEIVER_ADDRESS}`,
+    lifi: `https://jumper.exchange/?fromChain=1&toChain=137&integrator=${referralId}`,
+    jumper: `https://jumper.exchange/?ref=${referralId}`,
+    socket: `https://socketbridge.com/?ref=${referralId}`,
+    squid: `https://app.squidrouter.com/?ref=${referralId}`,
+    default: "#",
   };
 
-  return baseUrls[bridge.provider] || "#";
+  return baseUrls[bridge.provider] || baseUrls.default;
 }
 
 // ============================================
@@ -632,24 +722,21 @@ function generateReferralUrl(bridge, env) {
 // ============================================
 
 function handleStatus(env, headers) {
-  const configuredAPIs = [];
-  if (env.LIFI_API_KEY) configuredAPIs.push("LI.FI");
-  if (env.SOCKET_API_KEY) configuredAPIs.push("Socket");
-  if (env.ZEROX_API_KEY) configuredAPIs.push("0x");
-  if (env.ONE_INCH_API_KEY) configuredAPIs.push("1inch");
-
   return new Response(
     JSON.stringify({
       status: "operational",
-      version: "2.1.0",
-      environment: env.ENVIRONMENT,
+      version: "3.1.0",
+      environment: env.ENVIRONMENT || "production",
       timestamp: new Date().toISOString(),
-      integrator: env.INTEGRATOR_NAME,
-      feeReceiver: env.FEE_RECEIVER_ADDRESS,
-      feePercentage: env.FEE_PERCENTAGE,
-      configuredAPIs:
-        configuredAPIs.length > 0 ? configuredAPIs : ["Mock Data"],
-      totalAPIs: Object.keys(API_CONFIG).length,
+      integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
+      feeReceiver: env.FEE_RECEIVER_ADDRESS || "Not configured",
+      feePercentage: env.FEE_PERCENTAGE || "0.003",
+      apis: {
+        lifi: env.LIFI_API_KEY ? "Active (with API key)" : "Inactive",
+        jumper: "Active (free public API)",
+        socket: "Active (free public API)",
+        squid: "Active (free public API)",
+      },
     }),
     { headers }
   );
@@ -669,6 +756,7 @@ function handleTokens(headers) {
   return new Response(
     JSON.stringify({
       tokens: Object.keys(TOKENS),
+      details: TOKENS,
       count: Object.keys(TOKENS).length,
     }),
     { headers }

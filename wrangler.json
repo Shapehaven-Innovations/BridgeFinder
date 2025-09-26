@@ -1,0 +1,37 @@
+{
+  "name": "bridge-aggregato# Deploy to GitHub Pages
+git add .
+git commit -m "Production deployment"
+git push origin main
+
+# Or deploy to Cloudflare Pages
+npx wrangler pages deploy frontend --project-name bridge-aggregatorr-api",
+  "main": "worker/index.js",
+  "compatibility_date": "2024-01-01",
+  "workers_dev": false,
+  "vars": {
+    "ENVIRONMENT": "production",
+    "INTEGRATOR_NAME": "BridgeAggregator",
+    "FEE_PERCENTAGE": "0.003"
+  },
+  "env": {
+    "production": {
+      "name": "bridge-aggregator-api-prod",
+      "workers_dev": false,
+      "vars": {
+        "ENVIRONMENT": "production",
+        "INTEGRATOR_NAME": "BridgeAggregator",
+        "FEE_PERCENTAGE": "0.003"
+      }
+    },
+    "staging": {
+      "name": "bridge-aggregator-api-staging",
+      "workers_dev": true,
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "INTEGRATOR_NAME": "BridgeAggregator",
+        "FEE_PERCENTAGE": "0.003"
+      }
+    }
+  }
+}
