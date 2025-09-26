@@ -1,4 +1,5 @@
-// worker/index.js - Production Bridge Aggregator API with Real Integrations
+// worker/index.js - Production Bridge Aggregator API (Cloudflare Worker)
+
 // ============================================
 // CHAIN & TOKEN CONFIGURATIONS
 // ============================================
@@ -143,132 +144,148 @@ const TOKENS = {
   },
 };
 
+// ============================================
+// CORS & helpers
+// ============================================
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-API-Key",
-  "Content-Type": "application/json",
+  "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization",
+  Vary: "Origin",
 };
+
+// lossless decimal → units using BigInt
+function toUnits(amountStr, decimals) {
+  const [i = "0", f = ""] = String(amountStr).split(".");
+  const frac = (f + "0".repeat(decimals)).slice(0, decimals);
+  return (BigInt(i) * 10n ** BigInt(decimals) + BigInt(frac || "0")).toString();
+}
 
 // ============================================
 // MAIN WORKER HANDLER
 // ============================================
 
 export default {
-  async fetch(request, env, ctx) {
-    // Handle CORS preflight
+  async fetch(request, env) {
+    // Preflight
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
+      return new Response("", { status: 204, headers: corsHeaders });
     }
 
     const url = new URL(request.url);
     const path = url.pathname;
+    const debug = url.searchParams.get("debug") === "1";
 
     try {
       switch (path) {
         case "/api/compare":
           if (request.method === "POST") {
-            return await handleCompare(request, env, corsHeaders);
+            return await handleCompare(request, env, debug);
           }
           break;
+
         case "/api/status":
-          if (request.method === "GET") {
-            return handleStatus(env, corsHeaders);
-          }
+          if (request.method === "GET") return json(handleStatus(env));
           break;
+
         case "/api/chains":
-          if (request.method === "GET") {
-            return handleChains(corsHeaders);
-          }
+          if (request.method === "GET")
+            return json({ chains: CHAINS, count: Object.keys(CHAINS).length });
           break;
+
         case "/api/tokens":
           if (request.method === "GET") {
-            return handleTokens(corsHeaders);
+            return json({
+              tokens: Object.keys(TOKENS),
+              details: TOKENS,
+              count: Object.keys(TOKENS).length,
+            });
+          }
+          break;
+
+        // tiny echo to debug what callers send
+        case "/api/echo":
+          if (request.method === "POST") {
+            const ct = request.headers.get("content-type") || "";
+            const txt = await request.text();
+            return json({
+              success: true,
+              contentType: ct,
+              raw: txt,
+              parsed: ct.includes("application/json")
+                ? JSON.parse(txt || "{}")
+                : null,
+            });
           }
           break;
       }
 
-      return new Response(JSON.stringify({ error: "Not found" }), {
-        status: 404,
-        headers: corsHeaders,
-      });
+      return json({ success: false, error: "Not found" }, 404);
     } catch (error) {
       console.error("Worker error:", error);
-      return new Response(
-        JSON.stringify({
+      return json(
+        {
+          success: false,
           error: "Internal server error",
           message: error.message,
-        }),
-        { status: 500, headers: corsHeaders }
+        },
+        500
       );
     }
   },
 };
 
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 // ============================================
 // MAIN COMPARE HANDLER
 // ============================================
 
-async function handleCompare(request, env, headers) {
+async function handleCompare(request, env, debug) {
+  const headers = { ...corsHeaders, "Content-Type": "application/json" };
   try {
     const body = await request.json();
     const { fromChainId, toChainId, token, amount } = body;
 
     // Validation
     if (!fromChainId || !toChainId || !token || !amount) {
-      return new Response(
-        JSON.stringify({ error: "Missing required parameters" }),
-        { status: 400, headers }
+      return json(
+        { success: false, error: "Missing required parameters" },
+        400
       );
     }
-
     if (fromChainId === toChainId) {
-      return new Response(
-        JSON.stringify({ error: "Source and destination must be different" }),
-        { status: 400, headers }
+      return json(
+        { success: false, error: "Source and destination must be different" },
+        400
       );
     }
 
-    // ============================================
-    // FETCH QUOTES FROM ALL PROVIDERS IN PARALLEL
-    // ============================================
-    const quotePromises = [];
+    // Fetch all providers in parallel
+    const quotePromises = [
+      fetchLiFiQuote(fromChainId, toChainId, token, amount, env),
+      fetchJumperQuote(fromChainId, toChainId, token, amount, env),
+      fetchSocketQuote(fromChainId, toChainId, token, amount, env),
+      fetchSquidQuote(fromChainId, toChainId, token, amount, env),
+    ];
 
-    // Provider 1: LI.FI (uses API key from Cloudflare secrets)
-    if (env.LIFI_API_KEY) {
-      quotePromises.push(
-        fetchLiFiQuote(fromChainId, toChainId, token, amount, env)
-      );
-    }
-
-    // Provider 2: Jumper (free, no API key needed)
-    quotePromises.push(
-      fetchJumperQuote(fromChainId, toChainId, token, amount, env)
+    const results = await Promise.allSettled(quotePromises);
+    const outcomes = results.map((r) =>
+      r.status === "fulfilled"
+        ? { status: "fulfilled", value: r.value }
+        : { status: "rejected", reason: String(r.reason?.message || r.reason) }
     );
 
-    // Provider 3: Socket (free public API)
-    quotePromises.push(
-      fetchSocketQuote(fromChainId, toChainId, token, amount, env)
-    );
-
-    // Provider 4: Squid Router (free public API)
-    quotePromises.push(
-      fetchSquidQuote(fromChainId, toChainId, token, amount, env)
-    );
-
-    // TO ADD MORE PROVIDERS:
-    // 1. Create a new fetch function below (e.g., fetchNewProviderQuote)
-    // 2. Add it here: quotePromises.push(fetchNewProviderQuote(...))
-    // 3. Follow the same return format as other providers
-
-    // Wait for all providers to respond
-    const quotes = await Promise.allSettled(quotePromises);
-
-    // Process and filter valid quotes
-    const bridges = quotes
-      .filter((result) => result.status === "fulfilled" && result.value)
-      .map((result) => result.value)
-      .filter((bridge) => bridge !== null && bridge.totalCost > 0)
+    const bridges = results
+      .filter((r) => r.status === "fulfilled" && r.value)
+      .map((r) => r.value)
+      .filter((b) => b !== null && b.totalCost > 0)
       .sort((a, b) => a.totalCost - b.totalCost);
 
     if (bridges.length === 0) {
@@ -282,10 +299,11 @@ async function handleCompare(request, env, headers) {
             token,
             amount,
             tokenConfig: TOKENS[token],
-            quotesAttempted: quotes.length,
-            failures: quotes
+            quotesAttempted: results.length,
+            failures: results
               .filter((r) => r.status === "rejected")
-              .map((r) => r.reason?.message),
+              .map((r) => String(r.reason?.message || r.reason)),
+            outcomes: debug ? outcomes : undefined,
           },
           bridges: [],
         }),
@@ -293,502 +311,317 @@ async function handleCompare(request, env, headers) {
       );
     }
 
-    // Add referral/monetization links
-    const bridgesWithReferral = bridges.map((bridge, index) => ({
-      ...bridge,
-      url: generateReferralUrl(bridge, env),
-      isBest: index === 0,
+    const withReferral = bridges.map((b, i) => ({
+      ...b,
+      url: generateReferralUrl(b, env),
+      isBest: i === 0,
       saveAmount:
-        index > 0
-          ? bridges[bridges.length - 1].totalCost - bridge.totalCost
-          : 0,
+        i > 0 ? bridges[bridges.length - 1].totalCost - b.totalCost : 0,
     }));
 
     return new Response(
       JSON.stringify({
         success: true,
-        bridges: bridgesWithReferral,
+        bridges: withReferral,
         timestamp: new Date().toISOString(),
-        totalProviders: quotes.length,
+        totalProviders: results.length,
         successfulQuotes: bridges.length,
+        debug: debug ? { outcomes } : undefined,
       }),
       { headers }
     );
   } catch (error) {
     console.error("Compare error:", error);
-    return new Response(
-      JSON.stringify({
+    return json(
+      {
+        success: false,
         error: "Failed to compare bridges",
         details: error.message,
-      }),
-      { status: 500, headers }
+      },
+      500
     );
   }
 }
 
 // ============================================
-// BRIDGE PROVIDER INTEGRATIONS
-// ============================================
-// Each function fetches real quotes from a specific bridge provider
-// Returns standardized format: name, icon, provider, costs, timing, etc.
+// PROVIDERS
 // ============================================
 
-// ============================================
-// PROVIDER 1: LI.FI
-// Requires API key (stored in Cloudflare Workers secrets)
-// Docs: https://docs.li.fi/li.fi-api/li.fi-api
-// ============================================
+// 1) LI.FI (uses LIFI_API_KEY if present)
 async function fetchLiFiQuote(fromChainId, toChainId, token, amount, env) {
-  try {
-    const tokenConfig = TOKENS[token];
-    console.log(
-      `LiFi: Fetching quote for ${token} from chain ${fromChainId} to ${toChainId}, amount: ${amount}`
-    );
-    if (!tokenConfig) return null;
+  const tokenConfig = TOKENS[token];
+  if (!tokenConfig) throw new Error("LI.FI: unknown token");
 
-    // Get token addresses for source and destination chains
-    const fromTokenAddress =
-      typeof tokenConfig.address === "object"
-        ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
-        : tokenConfig.address;
-
-    const toTokenAddress =
-      typeof tokenConfig.address === "object"
-        ? tokenConfig.address[toChainId] || tokenConfig.address[1]
-        : tokenConfig.address;
-
-    // Convert amount to smallest unit (wei/gwei)
-    const amountInWei = Math.floor(
-      parseFloat(amount) * Math.pow(10, tokenConfig.decimals)
-    ).toString();
-
-    // Build request parameters
-    const params = new URLSearchParams({
-      fromChain: fromChainId,
-      toChain: toChainId,
-      fromToken: fromTokenAddress,
-      toToken: toTokenAddress,
-      fromAmount: amountInWei,
-      slippage: "0.005",
-      integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
-      allowDestinationCall: "false",
-    });
-
-    // Add monetization parameters if configured
-    if (env.FEE_RECEIVER_ADDRESS) {
-      params.append("fee", env.FEE_PERCENTAGE || "0.003");
-      params.append("referrer", env.FEE_RECEIVER_ADDRESS);
-    }
-    console.log("LiFi request URL:", `https://li.quest/v1/quote?${params}`);
-
-    // Make API request with API key from Cloudflare secrets
-    const response = await fetch(`https://li.quest/v1/quote?${params}`, {
-      headers: {
-        Accept: "application/json",
-        "x-lifi-api-key": env.LIFI_API_KEY, // From Cloudflare Workers secrets
-      },
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error("LI.FI error:", response.status);
-      console.error("LI.FI error body:", errorBody);
-      return null;
-    }
-
-    const data = await response.json();
-    console.log("LiFi response data:", JSON.stringify(data).slice(0, 500));
-    if (!data.estimate) {
-      console.error("LiFi: No estimate in response");
-      return null;
-    }
-
-    // Extract cost information from response
-    const estimate = data.estimate || {};
-    const gasCostUSD = parseFloat(estimate.gasCosts?.[0]?.amountUSD || "0");
-    const feeCostUSD = parseFloat(estimate.feeCosts?.[0]?.amountUSD || "0");
-    const slippageUSD = Math.abs(
-      parseFloat(estimate.toAmountUSD || "0") -
-        parseFloat(estimate.fromAmountUSD || "0")
-    );
-
-    const totalCost =
-      gasCostUSD + feeCostUSD + (slippageUSD > 0 ? slippageUSD : 0);
-
-    return {
-      name: "LI.FI",
-      icon: "🔷",
-      provider: "lifi",
-      totalCost: totalCost || 5,
-      bridgeFee: feeCostUSD,
-      gasFee: gasCostUSD,
-      estimatedTime: `${Math.ceil(
-        (estimate.executionDuration || 300) / 60
-      )} mins`,
-      security: "Audited",
-      liquidity: "High",
-      route: data.toolDetails?.name || "Best Route",
-      outputAmount: estimate.toAmount || null,
-    };
-  } catch (error) {
-    console.error("LI.FI fetch error:", error);
-    return null;
-  }
-}
-
-// ============================================
-// PROVIDER 2: JUMPER EXCHANGE
-// Free API, no key required
-// Powered by LI.FI infrastructure
-// Docs: https://docs.jumper.exchange/
-// ============================================
-async function fetchJumperQuote(fromChainId, toChainId, token, amount, env) {
-  try {
-    const tokenConfig = TOKENS[token];
-    if (!tokenConfig) return null;
-
-    const fromTokenAddress =
-      typeof tokenConfig.address === "object"
-        ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
-        : tokenConfig.address;
-
-    const toTokenAddress =
-      typeof tokenConfig.address === "object"
-        ? tokenConfig.address[toChainId] || tokenConfig.address[1]
-        : tokenConfig.address;
-
-    const amountInWei = Math.floor(
-      parseFloat(amount) * Math.pow(10, tokenConfig.decimals)
-    ).toString();
-
-    // Jumper uses LI.FI's advanced routes endpoint (free access)
-    const params = new URLSearchParams({
-      fromChain: fromChainId,
-      toChain: toChainId,
-      fromToken: fromTokenAddress,
-      toToken: toTokenAddress,
-      fromAmount: amountInWei,
-      slippage: "0.5",
-      integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
-    });
-
-    const response = await fetch(
-      `https://li.quest/v1/advanced/routes?${params}`,
-      {
-        headers: {
-          Accept: "application/json",
-        },
-      }
-    );
-
-    if (!response.ok) return null;
-
-    const data = await response.json();
-    const route = data.routes?.[0];
-    if (!route) return null;
-
-    // Extract costs from route data
-    const gasCostUSD = parseFloat(route.gasCostUSD || "3");
-    const steps = route.steps || [];
-    const totalFeeCost = steps.reduce((sum, step) => {
-      return sum + parseFloat(step.estimate?.feeCosts?.[0]?.amountUSD || "0");
-    }, 0);
-
-    return {
-      name: "Jumper",
-      icon: "🦘",
-      provider: "jumper",
-      totalCost: gasCostUSD + totalFeeCost + 2,
-      bridgeFee: totalFeeCost + 2,
-      gasFee: gasCostUSD,
-      estimatedTime: `${Math.ceil(
-        (route.steps?.[0]?.estimate?.executionDuration || 300) / 60
-      )} mins`,
-      security: "Verified",
-      liquidity: "High",
-      route: route.steps?.[0]?.toolDetails?.name || "Jumper Route",
-    };
-  } catch (error) {
-    console.error("Jumper fetch error:", error);
-    return null;
-  }
-}
-
-// ============================================
-// PROVIDER 3: SOCKET
-// Free public API, no authentication required
-// Docs: https://docs.socket.tech/socket-api/v2
-// ============================================
-async function fetchSocketQuote(fromChainId, toChainId, token, amount, env) {
-  try {
-    const tokenConfig = TOKENS[token];
-    if (!tokenConfig) return null;
-
-    const fromTokenAddress =
-      typeof tokenConfig.address === "object"
-        ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
-        : tokenConfig.address;
-
-    const toTokenAddress =
-      typeof tokenConfig.address === "object"
-        ? tokenConfig.address[toChainId] || tokenConfig.address[1]
-        : tokenConfig.address;
-
-    const amountInWei = Math.floor(
-      parseFloat(amount) * Math.pow(10, tokenConfig.decimals)
-    ).toString();
-
-    // Socket v2 public quote endpoint
-    const params = new URLSearchParams({
-      fromChainId: fromChainId,
-      fromTokenAddress: fromTokenAddress,
-      toChainId: toChainId,
-      toTokenAddress: toTokenAddress,
-      fromAmount: amountInWei,
-      userAddress:
-        env.FEE_RECEIVER_ADDRESS ||
-        "0x0000000000000000000000000000000000000000",
-      uniqueRoutesPerBridge: "true",
-      sort: "output",
-      singleTxOnly: "false",
-    });
-
-    const response = await fetch(`https://api.socket.tech/v2/quote?${params}`, {
-      headers: {
-        Accept: "application/json",
-      },
-    });
-
-    if (!response.ok) return null;
-
-    const data = await response.json();
-    const route = data.result?.routes?.[0];
-    if (!route) return null;
-
-    // Extract fee information
-    const totalGas = parseFloat(route.totalGasFeesInUsd || "0");
-    const bridgeFee = parseFloat(
-      route.userTxs?.[0]?.protocolFees?.feesInUsd || "0"
-    );
-
-    return {
-      name: "Socket",
-      icon: "🔌",
-      provider: "socket",
-      totalCost: totalGas + bridgeFee || 5,
-      bridgeFee: bridgeFee,
-      gasFee: totalGas,
-      estimatedTime: `${Math.ceil((route.serviceTime || 360) / 60)} mins`,
-      security: "Multi-sig",
-      liquidity: "High",
-      route: route.usedBridgeNames?.join(" → ") || "Socket Bridge",
-    };
-  } catch (error) {
-    console.error("Socket fetch error:", error);
-    return null;
-  }
-}
-
-// ============================================
-// PROVIDER 4: SQUID ROUTER
-// Free public API for basic quotes
-// Docs: https://docs.squidrouter.com/
-// ============================================
-async function fetchSquidQuote(fromChainId, toChainId, token, amount, env) {
-  try {
-    const tokenConfig = TOKENS[token];
-    if (!tokenConfig) return null;
-
-    // Squid uses different chain IDs, map them
-    const squidChainMap = {
-      1: "Ethereum",
-      137: "Polygon",
-      42161: "Arbitrum",
-      10: "Optimism",
-      56: "binance",
-      43114: "Avalanche",
-      8453: "base",
-    };
-
-    if (!squidChainMap[fromChainId] || !squidChainMap[toChainId]) {
-      return null; // Chain not supported by Squid
-    }
-
-    const fromTokenAddress =
-      typeof tokenConfig.address === "object"
-        ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
-        : tokenConfig.address;
-
-    const toTokenAddress =
-      typeof tokenConfig.address === "object"
-        ? tokenConfig.address[toChainId] || tokenConfig.address[1]
-        : tokenConfig.address;
-
-    // Squid public route endpoint
-    const requestBody = {
-      fromChain: squidChainMap[fromChainId],
-      toChain: squidChainMap[toChainId],
-      fromToken: fromTokenAddress,
-      toToken: toTokenAddress,
-      fromAmount: (
-        parseFloat(amount) * Math.pow(10, tokenConfig.decimals)
-      ).toString(),
-      slippage: 1,
-      enableExpress: true,
-      prefer: ["FASTEST"],
-    };
-
-    const response = await fetch("https://api.squidrouter.com/v1/route", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) return null;
-
-    const data = await response.json();
-    const route = data.route;
-    if (!route) return null;
-
-    // Parse Squid response
-    const gasCost = parseFloat(route.estimate?.gasCosts?.[0]?.amountUSD || "3");
-    const feeCost = parseFloat(route.estimate?.feeCosts?.[0]?.amountUSD || "2");
-    const totalCost = parseFloat(
-      route.estimate?.totalCostUSD || gasCost + feeCost
-    );
-
-    return {
-      name: "Squid",
-      icon: "🦑",
-      provider: "squid",
-      totalCost: totalCost || 5,
-      bridgeFee: feeCost,
-      gasFee: gasCost,
-      estimatedTime: `${Math.ceil(
-        (route.estimate?.estimatedRouteDuration || 420) / 60
-      )} mins`,
-      security: "Axelar Network",
-      liquidity: "Medium",
-      route: route.estimate?.routeType || "Squid Route",
-    };
-  } catch (error) {
-    console.error("Squid fetch error:", error);
-    return null;
-  }
-}
-
-// ============================================
-// TO ADD A NEW PROVIDER:
-// ============================================
-// 1. Copy this template function below
-// 2. Update the API endpoint and parameters
-// 3. Add the function call in handleCompare above
-// ============================================
-/*
-async function fetchNewProviderQuote(fromChainId, toChainId, token, amount, env) {
-  try {
-    const tokenConfig = TOKENS[token];
-    if (!tokenConfig) return null;
-
-    // Get token addresses
-    const fromTokenAddress = typeof tokenConfig.address === "object"
+  const fromToken =
+    typeof tokenConfig.address === "object"
       ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
       : tokenConfig.address;
+  const toToken =
+    typeof tokenConfig.address === "object"
+      ? tokenConfig.address[toChainId] || tokenConfig.address[1]
+      : tokenConfig.address;
+  const amountInWei = toUnits(amount, tokenConfig.decimals);
 
-    // Make API call to provider
-    const response = await fetch("PROVIDER_API_URL", {
-      // Add request configuration
-    });
-
-    if (!response.ok) return null;
-    const data = await response.json();
-
-    // Return standardized format
-    return {
-      name: "Provider Name",
-      icon: "🌉",
-      provider: "providername",
-      totalCost: 5,  // Total cost in USD
-      bridgeFee: 2,  // Bridge fee in USD
-      gasFee: 3,     // Gas fee in USD
-      estimatedTime: "5 mins",
-      security: "Audited",
-      liquidity: "High",
-      route: "Route Name",
-    };
-  } catch (error) {
-    console.error("Provider fetch error:", error);
-    return null;
+  const params = new URLSearchParams({
+    fromChain: String(fromChainId),
+    toChain: String(toChainId),
+    fromToken,
+    toToken,
+    fromAmount: amountInWei,
+    slippage: "0.005",
+    integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
+    allowDestinationCall: "false",
+  });
+  if (env.FEE_RECEIVER_ADDRESS) {
+    params.append("fee", env.FEE_PERCENTAGE || "0.003");
+    params.append("referrer", env.FEE_RECEIVER_ADDRESS);
   }
+
+  const headers = { Accept: "application/json" };
+  if (env.LIFI_API_KEY) headers["x-lifi-api-key"] = env.LIFI_API_KEY;
+
+  const res = await fetch(`https://li.quest/v1/quote?${params}`, { headers });
+  if (!res.ok) throw new Error(`LI.FI HTTP ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  if (!data?.estimate) throw new Error("LI.FI: no estimate in response");
+
+  const est = data.estimate;
+  const gasCostUSD = parseFloat(est.gasCosts?.[0]?.amountUSD || "0");
+  const feeCostUSD = parseFloat(est.feeCosts?.[0]?.amountUSD || "0");
+  const fromUSD = parseFloat(est.fromAmountUSD || "0");
+  const toUSD = parseFloat(est.toAmountUSD || "0");
+  const slippageUSD = Math.abs(toUSD - fromUSD);
+  const totalCost =
+    gasCostUSD + feeCostUSD + (slippageUSD > 0 ? slippageUSD : 0);
+
+  return {
+    name: "LI.FI",
+    icon: "🔷",
+    provider: "lifi",
+    totalCost: totalCost || 5,
+    bridgeFee: feeCostUSD,
+    gasFee: gasCostUSD,
+    estimatedTime: `${Math.ceil((est.executionDuration || 300) / 60)} mins`,
+    security: "Audited",
+    liquidity: "High",
+    route: data.toolDetails?.name || "Best Route",
+    outputAmount: est.toAmount || null,
+  };
 }
-*/
+
+// 2) Jumper (free; LI.FI infra)
+async function fetchJumperQuote(fromChainId, toChainId, token, amount, env) {
+  const tokenConfig = TOKENS[token];
+  if (!tokenConfig) throw new Error("Jumper: unknown token");
+
+  const fromToken =
+    typeof tokenConfig.address === "object"
+      ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
+      : tokenConfig.address;
+  const toToken =
+    typeof tokenConfig.address === "object"
+      ? tokenConfig.address[toChainId] || tokenConfig.address[1]
+      : tokenConfig.address;
+  const amountInWei = toUnits(amount, tokenConfig.decimals);
+
+  const params = new URLSearchParams({
+    fromChain: String(fromChainId),
+    toChain: String(toChainId),
+    fromToken,
+    toToken,
+    fromAmount: amountInWei,
+    slippage: "0.5",
+    integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
+  });
+
+  const res = await fetch(`https://li.quest/v1/advanced/routes?${params}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`Jumper HTTP ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  const route = data.routes?.[0];
+  if (!route) throw new Error("Jumper: routes[] empty");
+
+  const gasCostUSD = parseFloat(route.gasCostUSD || "3");
+  const steps = route.steps || [];
+  const totalFeeCost = steps.reduce(
+    (sum, s) => sum + parseFloat(s.estimate?.feeCosts?.[0]?.amountUSD || "0"),
+    0
+  );
+
+  return {
+    name: "Jumper",
+    icon: "🦘",
+    provider: "jumper",
+    totalCost: gasCostUSD + totalFeeCost + 2, // slight buffer
+    bridgeFee: totalFeeCost + 2,
+    gasFee: gasCostUSD,
+    estimatedTime: `${Math.ceil(
+      (route.steps?.[0]?.estimate?.executionDuration || 300) / 60
+    )} mins`,
+    security: "Verified",
+    liquidity: "High",
+    route: route.steps?.[0]?.toolDetails?.name || "Jumper Route",
+  };
+}
+
+// 3) Socket (free public)
+async function fetchSocketQuote(fromChainId, toChainId, token, amount, env) {
+  const tokenConfig = TOKENS[token];
+  if (!tokenConfig) throw new Error("Socket: unknown token");
+
+  const fromToken =
+    typeof tokenConfig.address === "object"
+      ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
+      : tokenConfig.address;
+  const toToken =
+    typeof tokenConfig.address === "object"
+      ? tokenConfig.address[toChainId] || tokenConfig.address[1]
+      : tokenConfig.address;
+  const amountInWei = toUnits(amount, tokenConfig.decimals);
+
+  const params = new URLSearchParams({
+    fromChainId: String(fromChainId),
+    fromTokenAddress: fromToken,
+    toChainId: String(toChainId),
+    toTokenAddress: toToken,
+    fromAmount: amountInWei,
+    userAddress:
+      env.FEE_RECEIVER_ADDRESS || "0x0000000000000000000000000000000000000000",
+    uniqueRoutesPerBridge: "true",
+    sort: "output",
+    singleTxOnly: "false",
+  });
+
+  const res = await fetch(`https://api.socket.tech/v2/quote?${params}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`Socket HTTP ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  const route = data.result?.routes?.[0];
+  if (!route) throw new Error("Socket: result.routes[] empty");
+
+  const totalGas = parseFloat(route.totalGasFeesInUsd || "0");
+  const bridgeFee = parseFloat(
+    route.userTxs?.[0]?.protocolFees?.feesInUsd || "0"
+  );
+
+  return {
+    name: "Socket",
+    icon: "🔌",
+    provider: "socket",
+    totalCost: totalGas + bridgeFee || 5,
+    bridgeFee,
+    gasFee: totalGas,
+    estimatedTime: `${Math.ceil((route.serviceTime || 360) / 60)} mins`,
+    security: "Multi-sig",
+    liquidity: "High",
+    route: route.usedBridgeNames?.join(" → ") || "Socket Bridge",
+  };
+}
+
+// 4) Squid Router (free public)
+async function fetchSquidQuote(fromChainId, toChainId, token, amount, env) {
+  const tokenConfig = TOKENS[token];
+  if (!tokenConfig) throw new Error("Squid: unknown token");
+
+  const squidChainMap = {
+    1: "Ethereum",
+    137: "Polygon",
+    42161: "Arbitrum",
+    10: "Optimism",
+    56: "binance",
+    43114: "Avalanche",
+    8453: "base",
+  };
+  if (!squidChainMap[fromChainId] || !squidChainMap[toChainId]) {
+    throw new Error("Squid: unsupported chain id");
+  }
+
+  const fromToken =
+    typeof tokenConfig.address === "object"
+      ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
+      : tokenConfig.address;
+  const toToken =
+    typeof tokenConfig.address === "object"
+      ? tokenConfig.address[toChainId] || tokenConfig.address[1]
+      : tokenConfig.address;
+
+  const requestBody = {
+    fromChain: squidChainMap[fromChainId],
+    toChain: squidChainMap[toChainId],
+    fromToken: fromToken,
+    toToken: toToken,
+    fromAmount: toUnits(amount, tokenConfig.decimals),
+    slippage: 1,
+    enableExpress: true,
+    prefer: ["FASTEST"],
+  };
+
+  const res = await fetch("https://api.squidrouter.com/v1/route", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(requestBody),
+  });
+  if (!res.ok) throw new Error(`Squid HTTP ${res.status} ${await res.text()}`);
+
+  const data = await res.json();
+  const route = data.route;
+  if (!route) throw new Error("Squid: route missing");
+
+  const gasCost = parseFloat(route.estimate?.gasCosts?.[0]?.amountUSD || "3");
+  const feeCost = parseFloat(route.estimate?.feeCosts?.[0]?.amountUSD || "2");
+  const totalCost = parseFloat(
+    route.estimate?.totalCostUSD || gasCost + feeCost
+  );
+
+  return {
+    name: "Squid",
+    icon: "🦑",
+    provider: "squid",
+    totalCost: totalCost || 5,
+    bridgeFee: feeCost,
+    gasFee: gasCost,
+    estimatedTime: `${Math.ceil(
+      (route.estimate?.estimatedRouteDuration || 420) / 60
+    )} mins`,
+    security: "Axelar Network",
+    liquidity: "Medium",
+    route: route.estimate?.routeType || "Squid Route",
+  };
+}
 
 // ============================================
-// UTILITY FUNCTIONS
+// UTILS
 // ============================================
 
-// Generate referral URLs for monetization
 function generateReferralUrl(bridge, env) {
   const referralId =
     env.FEE_RECEIVER_ADDRESS || env.INTEGRATOR_NAME || "bridgeaggregator";
-
-  // Each provider has different referral URL formats
-  const baseUrls = {
+  const base = {
     lifi: `https://jumper.exchange/?fromChain=1&toChain=137&integrator=${referralId}`,
     jumper: `https://jumper.exchange/?ref=${referralId}`,
     socket: `https://socketbridge.com/?ref=${referralId}`,
     squid: `https://app.squidrouter.com/?ref=${referralId}`,
     default: "#",
   };
-
-  return baseUrls[bridge.provider] || baseUrls.default;
+  return base[bridge.provider] || base.default;
 }
 
-// ============================================
-// INFO ENDPOINTS
-// ============================================
-
-function handleStatus(env, headers) {
-  return new Response(
-    JSON.stringify({
-      status: "operational",
-      version: "3.1.0",
-      environment: env.ENVIRONMENT || "production",
-      timestamp: new Date().toISOString(),
-      integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
-      feeReceiver: env.FEE_RECEIVER_ADDRESS || "Not configured",
-      feePercentage: env.FEE_PERCENTAGE || "0.003",
-      apis: {
-        lifi: env.LIFI_API_KEY ? "Active (with API key)" : "Inactive",
-        jumper: "Active (free public API)",
-        socket: "Active (free public API)",
-        squid: "Active (free public API)",
-      },
-    }),
-    { headers }
-  );
-}
-
-function handleChains(headers) {
-  return new Response(
-    JSON.stringify({
-      chains: CHAINS,
-      count: Object.keys(CHAINS).length,
-    }),
-    { headers }
-  );
-}
-
-function handleTokens(headers) {
-  return new Response(
-    JSON.stringify({
-      tokens: Object.keys(TOKENS),
-      details: TOKENS,
-      count: Object.keys(TOKENS).length,
-    }),
-    { headers }
-  );
+function handleStatus(env) {
+  return {
+    status: "operational",
+    version: "3.1.0",
+    environment: env.ENVIRONMENT || "production",
+    timestamp: new Date().toISOString(),
+    integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
+    feeReceiver: env.FEE_RECEIVER_ADDRESS || "Not configured",
+    feePercentage: env.FEE_PERCENTAGE || "0.003",
+    apis: {
+      lifi: env.LIFI_API_KEY ? "Active (with API key)" : "Inactive",
+      jumper: "Active (free public API)",
+      socket: "Active (free public API)",
+      squid: "Active (free public API)",
+    },
+  };
 }
