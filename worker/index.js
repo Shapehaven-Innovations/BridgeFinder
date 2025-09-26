@@ -1,66 +1,47 @@
-// worker/index.js - Production Bridge Aggregator API (Cloudflare Worker)
+// worker/index.js — Bridge Aggregator API (Cloudflare Worker)
+// Version 4.0 - Multiple Public APIs with Rate Limit Management
+// ===============================================
+// CONFIGURATION
+// ===============================================
 
-// ============================================
-// CHAIN & TOKEN CONFIGURATIONS
-// ============================================
+const CONFIG = {
+  // Rate limiting and retry settings
+  RETRY_ATTEMPTS: 3,
+  RETRY_DELAY: 500,
+  REQUEST_TIMEOUT: 10000,
+
+  // Provider settings
+  PROVIDERS: {
+    LIFI: { enabled: true, priority: 1, requiresAuth: false },
+    JUMPER: { enabled: true, priority: 2, requiresAuth: false },
+    SQUID: { enabled: true, priority: 3, requiresAuth: false },
+    RANGO: { enabled: true, priority: 4, requiresAuth: false },
+    VIA: { enabled: true, priority: 5, requiresAuth: false },
+    RUBIC: { enabled: true, priority: 6, requiresAuth: false },
+    ONEINCH: { enabled: true, priority: 7, requiresAuth: false },
+    OPENOCEAN: { enabled: true, priority: 8, requiresAuth: false },
+  },
+
+  // Default values for quotes
+  DEFAULT_SLIPPAGE: "1",
+  DEFAULT_GAS_ESTIMATE: 5,
+
+  // Cache settings
+  CACHE_DURATION: 30000, // 30 seconds
+};
+
+// ===============================================
+// CHAINS & TOKENS
+// ===============================================
 
 const CHAINS = {
-  1: {
-    name: "Ethereum",
-    icon: "🔷",
-    native: "ETH",
-    lifiId: 1,
-    socketId: 1,
-    decimals: 18,
-  },
-  137: {
-    name: "Polygon",
-    icon: "🟣",
-    native: "MATIC",
-    lifiId: 137,
-    socketId: 137,
-    decimals: 18,
-  },
-  42161: {
-    name: "Arbitrum",
-    icon: "🔵",
-    native: "ETH",
-    lifiId: 42161,
-    socketId: 42161,
-    decimals: 18,
-  },
-  10: {
-    name: "Optimism",
-    icon: "🔴",
-    native: "ETH",
-    lifiId: 10,
-    socketId: 10,
-    decimals: 18,
-  },
-  56: {
-    name: "BSC",
-    icon: "🟡",
-    native: "BNB",
-    lifiId: 56,
-    socketId: 56,
-    decimals: 18,
-  },
-  43114: {
-    name: "Avalanche",
-    icon: "🔺",
-    native: "AVAX",
-    lifiId: 43114,
-    socketId: 43114,
-    decimals: 18,
-  },
-  8453: {
-    name: "Base",
-    icon: "🟦",
-    native: "ETH",
-    lifiId: 8453,
-    socketId: 8453,
-    decimals: 18,
-  },
+  1: { name: "Ethereum", icon: "🔷", native: "ETH", decimals: 18 },
+  137: { name: "Polygon", icon: "🟣", native: "MATIC", decimals: 18 },
+  42161: { name: "Arbitrum", icon: "🔵", native: "ETH", decimals: 18 },
+  10: { name: "Optimism", icon: "🔴", native: "ETH", decimals: 18 },
+  56: { name: "BSC", icon: "🟡", native: "BNB", decimals: 18 },
+  43114: { name: "Avalanche", icon: "🔺", native: "AVAX", decimals: 18 },
+  8453: { name: "Base", icon: "🟦", native: "ETH", decimals: 18 },
 };
 
 const TOKENS = {
@@ -144,9 +125,9 @@ const TOKENS = {
   },
 };
 
-// ============================================
-// CORS & helpers
-// ============================================
+// ===============================================
+// UTILITIES
+// ===============================================
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -155,30 +136,97 @@ const corsHeaders = {
   Vary: "Origin",
 };
 
-// lossless decimal → units using BigInt
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
 function toUnits(amountStr, decimals) {
   const [i = "0", f = ""] = String(amountStr).split(".");
   const frac = (f + "0".repeat(decimals)).slice(0, decimals);
   return (BigInt(i) * 10n ** BigInt(decimals) + BigInt(frac || "0")).toString();
 }
 
-// ============================================
-// MAIN WORKER HANDLER
-// ============================================
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj, null, 2), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+async function fetchWithTimeout(
+  url,
+  options = {},
+  timeout = CONFIG.REQUEST_TIMEOUT
+) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === "AbortError") {
+      throw new Error("Request timeout");
+    }
+    throw error;
+  }
+}
+
+async function retryWithBackoff(fn, attempts = CONFIG.RETRY_ATTEMPTS) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (i === attempts - 1) throw error;
+      await new Promise((r) =>
+        setTimeout(r, CONFIG.RETRY_DELAY * Math.pow(2, i))
+      );
+    }
+  }
+}
+
+function getTokenAddress(token, chainId) {
+  const tokenCfg = TOKENS[token];
+  if (!tokenCfg) return null;
+
+  if (typeof tokenCfg.address === "object") {
+    return tokenCfg.address[chainId] || tokenCfg.address[1];
+  }
+  return tokenCfg.address;
+}
+
+// ===============================================
+// WORKER ENTRY POINT
+// ===============================================
 
 export default {
   async fetch(request, env) {
-    // Preflight
     if (request.method === "OPTIONS") {
       return new Response("", { status: 204, headers: corsHeaders });
     }
 
     const url = new URL(request.url);
-    const path = url.pathname;
     const debug = url.searchParams.get("debug") === "1";
 
     try {
-      switch (path) {
+      switch (url.pathname) {
+        case "/":
+        case "/api":
+          return json({
+            name: "Bridge Aggregator API",
+            version: "4.0",
+            endpoints: {
+              "/api/compare": "POST - Compare bridge routes",
+              "/api/status": "GET - Service status",
+              "/api/chains": "GET - Supported chains",
+              "/api/tokens": "GET - Supported tokens",
+              "/api/providers": "GET - Active providers",
+            },
+          });
+
         case "/api/compare":
           if (request.method === "POST") {
             return await handleCompare(request, env, debug);
@@ -186,12 +234,18 @@ export default {
           break;
 
         case "/api/status":
-          if (request.method === "GET") return json(handleStatus(env));
+          if (request.method === "GET") {
+            return json(handleStatus(env));
+          }
           break;
 
         case "/api/chains":
-          if (request.method === "GET")
-            return json({ chains: CHAINS, count: Object.keys(CHAINS).length });
+          if (request.method === "GET") {
+            return json({
+              chains: CHAINS,
+              count: Object.keys(CHAINS).length,
+            });
+          }
           break;
 
         case "/api/tokens":
@@ -204,31 +258,21 @@ export default {
           }
           break;
 
-        // tiny echo to debug what callers send
-        case "/api/echo":
-          if (request.method === "POST") {
-            const ct = request.headers.get("content-type") || "";
-            const txt = await request.text();
-            return json({
-              success: true,
-              contentType: ct,
-              raw: txt,
-              parsed: ct.includes("application/json")
-                ? JSON.parse(txt || "{}")
-                : null,
-            });
+        case "/api/providers":
+          if (request.method === "GET") {
+            return json(getActiveProviders(env));
           }
           break;
       }
 
       return json({ success: false, error: "Not found" }, 404);
-    } catch (error) {
-      console.error("Worker error:", error);
+    } catch (err) {
+      console.error("Worker error:", err);
       return json(
         {
           success: false,
           error: "Internal server error",
-          message: error.message,
+          message: err.message,
         },
         500
       );
@@ -236,100 +280,249 @@ export default {
   },
 };
 
-function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-// ============================================
+// ===============================================
 // MAIN COMPARE HANDLER
-// ============================================
+// ===============================================
 
 async function handleCompare(request, env, debug) {
-  const headers = { ...corsHeaders, "Content-Type": "application/json" };
   try {
-    const body = await request.json();
-    const { fromChainId, toChainId, token, amount } = body;
+    const { fromChainId, toChainId, token, amount, fromAddress } =
+      await request.json();
 
     // Validation
     if (!fromChainId || !toChainId || !token || !amount) {
       return json(
-        { success: false, error: "Missing required parameters" },
+        {
+          success: false,
+          error:
+            "Missing required parameters (fromChainId, toChainId, token, amount)",
+        },
         400
       );
     }
+
     if (fromChainId === toChainId) {
       return json(
-        { success: false, error: "Source and destination must be different" },
+        {
+          success: false,
+          error: "Source and destination chains must be different",
+        },
         400
       );
     }
 
-    // Fetch all providers in parallel
-    const quotePromises = [
-      fetchLiFiQuote(fromChainId, toChainId, token, amount, env),
-      fetchJumperQuote(fromChainId, toChainId, token, amount, env),
-      fetchSocketQuote(fromChainId, toChainId, token, amount, env),
-      fetchSquidQuote(fromChainId, toChainId, token, amount, env),
-    ];
+    // Get sender address
+    const sender = fromAddress || env.QUOTE_FROM_ADDRESS || ZERO_ADDRESS;
+    if (!sender || sender === ZERO_ADDRESS) {
+      return json(
+        {
+          success: false,
+          error: "Valid wallet address required",
+          details:
+            "Set QUOTE_FROM_ADDRESS secret or pass fromAddress in request body",
+        },
+        400
+      );
+    }
 
-    const results = await Promise.allSettled(quotePromises);
-    const outcomes = results.map((r) =>
-      r.status === "fulfilled"
-        ? { status: "fulfilled", value: r.value }
-        : { status: "rejected", reason: String(r.reason?.message || r.reason) }
+    // Create provider fetchers with staggered delays to avoid rate limits
+    const providerCalls = [];
+    let delay = 0;
+
+    // Group 1: Primary providers (no delay)
+    if (CONFIG.PROVIDERS.LIFI.enabled) {
+      providerCalls.push({
+        name: "LI.FI",
+        fn: () =>
+          fetchLiFiQuote(fromChainId, toChainId, token, amount, env, sender),
+      });
+    }
+
+    if (CONFIG.PROVIDERS.RANGO.enabled) {
+      providerCalls.push({
+        name: "Rango",
+        fn: () =>
+          fetchRangoQuote(fromChainId, toChainId, token, amount, env, sender),
+      });
+    }
+
+    // Group 2: Secondary providers (500ms delay)
+    delay = 500;
+    if (CONFIG.PROVIDERS.VIA.enabled) {
+      providerCalls.push({
+        name: "Via",
+        fn: () =>
+          delayedCall(
+            () =>
+              fetchViaQuote(fromChainId, toChainId, token, amount, env, sender),
+            delay
+          ),
+      });
+    }
+
+    if (CONFIG.PROVIDERS.OPENOCEAN.enabled) {
+      providerCalls.push({
+        name: "OpenOcean",
+        fn: () =>
+          delayedCall(
+            () =>
+              fetchOpenOceanQuote(
+                fromChainId,
+                toChainId,
+                token,
+                amount,
+                env,
+                sender
+              ),
+            delay
+          ),
+      });
+    }
+
+    // Group 3: Rate-limited providers (1000ms delay)
+    delay = 1000;
+    if (CONFIG.PROVIDERS.JUMPER.enabled) {
+      providerCalls.push({
+        name: "Jumper",
+        fn: () =>
+          delayedCall(
+            () =>
+              fetchJumperQuote(
+                fromChainId,
+                toChainId,
+                token,
+                amount,
+                env,
+                sender
+              ),
+            delay
+          ),
+      });
+    }
+
+    if (CONFIG.PROVIDERS.SQUID.enabled) {
+      providerCalls.push({
+        name: "Squid",
+        fn: () =>
+          delayedCall(
+            () =>
+              fetchSquidQuote(
+                fromChainId,
+                toChainId,
+                token,
+                amount,
+                env,
+                sender
+              ),
+            delay
+          ),
+      });
+    }
+
+    // Group 4: Additional providers (1500ms delay)
+    delay = 1500;
+    if (CONFIG.PROVIDERS.RUBIC.enabled) {
+      providerCalls.push({
+        name: "Rubic",
+        fn: () =>
+          delayedCall(
+            () =>
+              fetchRubicQuote(
+                fromChainId,
+                toChainId,
+                token,
+                amount,
+                env,
+                sender
+              ),
+            delay
+          ),
+      });
+    }
+
+    if (CONFIG.PROVIDERS.ONEINCH.enabled && env.ONEINCH_API_KEY) {
+      providerCalls.push({
+        name: "1inch",
+        fn: () =>
+          delayedCall(
+            () =>
+              fetch1inchQuote(
+                fromChainId,
+                toChainId,
+                token,
+                amount,
+                env,
+                sender
+              ),
+            delay
+          ),
+      });
+    }
+
+    // Execute all provider calls
+    const results = await Promise.allSettled(
+      providerCalls.map(async (call) => {
+        try {
+          const result = await call.fn();
+          return { ...result, _provider: call.name };
+        } catch (error) {
+          console.error(`${call.name} error:`, error.message);
+          return null;
+        }
+      })
     );
 
+    // Process results
     const bridges = results
-      .filter((r) => r.status === "fulfilled" && r.value)
+      .filter(
+        (r) => r.status === "fulfilled" && r.value && r.value.totalCost > 0
+      )
       .map((r) => r.value)
-      .filter((b) => b !== null && b.totalCost > 0)
       .sort((a, b) => a.totalCost - b.totalCost);
 
     if (bridges.length === 0) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "No routes available for this pair",
-          debug: {
-            fromChainId,
-            toChainId,
-            token,
-            amount,
-            tokenConfig: TOKENS[token],
-            quotesAttempted: results.length,
-            failures: results
-              .filter((r) => r.status === "rejected")
-              .map((r) => String(r.reason?.message || r.reason)),
-            outcomes: debug ? outcomes : undefined,
-          },
-          bridges: [],
-        }),
-        { headers }
-      );
+      return json({
+        success: false,
+        error: "No routes available for this pair",
+        details: debug
+          ? {
+              providers: providerCalls.map((p) => p.name),
+              failures: results.map((r, i) => ({
+                provider: providerCalls[i].name,
+                status: r.status,
+                error: r.status === "rejected" ? r.reason?.message : null,
+              })),
+            }
+          : undefined,
+        bridges: [],
+      });
     }
 
-    const withReferral = bridges.map((b, i) => ({
-      ...b,
-      url: generateReferralUrl(b, env),
-      isBest: i === 0,
-      saveAmount:
-        i > 0 ? bridges[bridges.length - 1].totalCost - b.totalCost : 0,
+    // Add metadata to bridges
+    const enrichedBridges = bridges.map((bridge, index) => ({
+      ...bridge,
+      position: index + 1,
+      isBest: index === 0,
+      savings:
+        index > 0
+          ? bridges[bridges.length - 1].totalCost - bridge.totalCost
+          : 0,
+      url: generateReferralUrl(bridge, env),
     }));
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        bridges: withReferral,
-        timestamp: new Date().toISOString(),
-        totalProviders: results.length,
-        successfulQuotes: bridges.length,
-        debug: debug ? { outcomes } : undefined,
-      }),
-      { headers }
-    );
+    return json({
+      success: true,
+      bridges: enrichedBridges,
+      summary: {
+        bestPrice: bridges[0].totalCost,
+        worstPrice: bridges[bridges.length - 1].totalCost,
+        averagePrice:
+          bridges.reduce((sum, b) => sum + b.totalCost, 0) / bridges.length,
+        providersQueried: providerCalls.length,
+        providersResponded: bridges.length,
+      },
+      timestamp: new Date().toISOString(),
+    });
   } catch (error) {
     console.error("Compare error:", error);
     return json(
@@ -343,62 +536,65 @@ async function handleCompare(request, env, debug) {
   }
 }
 
-// ============================================
-// PROVIDERS
-// ============================================
+async function delayedCall(fn, delay) {
+  await new Promise((r) => setTimeout(r, delay));
+  return fn();
+}
 
-// 1) LI.FI (uses LIFI_API_KEY if present)
-async function fetchLiFiQuote(fromChainId, toChainId, token, amount, env) {
-  const tokenConfig = TOKENS[token];
-  if (!tokenConfig) throw new Error("LI.FI: unknown token");
+// ===============================================
+// BRIDGE PROVIDERS (ALL PUBLIC/FREE TIER)
+// ===============================================
 
-  const fromToken =
-    typeof tokenConfig.address === "object"
-      ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
-      : tokenConfig.address;
-  const toToken =
-    typeof tokenConfig.address === "object"
-      ? tokenConfig.address[toChainId] || tokenConfig.address[1]
-      : tokenConfig.address;
-  const amountInWei = toUnits(amount, tokenConfig.decimals);
+// 1. LI.FI - Public API (rate limit: 30 req/min without key, 100+ with key)
+async function fetchLiFiQuote(
+  fromChainId,
+  toChainId,
+  token,
+  amount,
+  env,
+  sender
+) {
+  const tokenCfg = TOKENS[token];
+  if (!tokenCfg) throw new Error("LI.FI: unknown token");
+
+  const fromToken = getTokenAddress(token, fromChainId);
+  const toToken = getTokenAddress(token, toChainId);
+  const fromAmount = toUnits(amount, tokenCfg.decimals);
 
   const params = new URLSearchParams({
     fromChain: String(fromChainId),
     toChain: String(toChainId),
     fromToken,
     toToken,
-    fromAmount: amountInWei,
-    slippage: "0.005",
+    fromAmount,
+    fromAddress: sender,
+    slippage: CONFIG.DEFAULT_SLIPPAGE,
     integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
-    allowDestinationCall: "false",
   });
-  if (env.FEE_RECEIVER_ADDRESS) {
-    params.append("fee", env.FEE_PERCENTAGE || "0.003");
-    params.append("referrer", env.FEE_RECEIVER_ADDRESS);
-  }
 
   const headers = { Accept: "application/json" };
-  if (env.LIFI_API_KEY) headers["x-lifi-api-key"] = env.LIFI_API_KEY;
+  if (env.LIFI_API_KEY) {
+    headers["x-lifi-api-key"] = env.LIFI_API_KEY;
+  }
 
-  const res = await fetch(`https://li.quest/v1/quote?${params}`, { headers });
-  if (!res.ok) throw new Error(`LI.FI HTTP ${res.status} ${await res.text()}`);
+  const res = await fetchWithTimeout(`https://li.quest/v1/quote?${params}`, {
+    headers,
+  });
+  if (!res.ok) throw new Error(`LI.FI: HTTP ${res.status}`);
+
   const data = await res.json();
-  if (!data?.estimate) throw new Error("LI.FI: no estimate in response");
+  if (!data?.estimate) throw new Error("LI.FI: Invalid response");
 
   const est = data.estimate;
   const gasCostUSD = parseFloat(est.gasCosts?.[0]?.amountUSD || "0");
   const feeCostUSD = parseFloat(est.feeCosts?.[0]?.amountUSD || "0");
-  const fromUSD = parseFloat(est.fromAmountUSD || "0");
-  const toUSD = parseFloat(est.toAmountUSD || "0");
-  const slippageUSD = Math.abs(toUSD - fromUSD);
-  const totalCost =
-    gasCostUSD + feeCostUSD + (slippageUSD > 0 ? slippageUSD : 0);
+  const totalCost = gasCostUSD + feeCostUSD;
 
   return {
     name: "LI.FI",
     icon: "🔷",
     provider: "lifi",
-    totalCost: totalCost || 5,
+    totalCost: totalCost || CONFIG.DEFAULT_GAS_ESTIMATE,
     bridgeFee: feeCostUSD,
     gasFee: gasCostUSD,
     estimatedTime: `${Math.ceil((est.executionDuration || 300) / 60)} mins`,
@@ -409,42 +605,46 @@ async function fetchLiFiQuote(fromChainId, toChainId, token, amount, env) {
   };
 }
 
-// 2) Jumper (free; LI.FI infra)
-async function fetchJumperQuote(fromChainId, toChainId, token, amount, env) {
-  const tokenConfig = TOKENS[token];
-  if (!tokenConfig) throw new Error("Jumper: unknown token");
+// 2. Jumper - Uses LI.FI infrastructure (same rate limits)
+async function fetchJumperQuote(
+  fromChainId,
+  toChainId,
+  token,
+  amount,
+  env,
+  sender
+) {
+  const tokenCfg = TOKENS[token];
+  if (!tokenCfg) throw new Error("Jumper: unknown token");
 
-  const fromToken =
-    typeof tokenConfig.address === "object"
-      ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
-      : tokenConfig.address;
-  const toToken =
-    typeof tokenConfig.address === "object"
-      ? tokenConfig.address[toChainId] || tokenConfig.address[1]
-      : tokenConfig.address;
-  const amountInWei = toUnits(amount, tokenConfig.decimals);
+  const fromToken = getTokenAddress(token, fromChainId);
+  const toToken = getTokenAddress(token, toChainId);
+  const fromAmount = toUnits(amount, tokenCfg.decimals);
 
   const params = new URLSearchParams({
     fromChain: String(fromChainId),
     toChain: String(toChainId),
     fromToken,
     toToken,
-    fromAmount: amountInWei,
-    slippage: "0.5",
-    integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
+    fromAmount,
+    fromAddress: sender,
+    slippage: CONFIG.DEFAULT_SLIPPAGE,
+    integrator: "jumper-public",
   });
 
-  const res = await fetch(`https://li.quest/v1/advanced/routes?${params}`, {
+  const res = await fetchWithTimeout(`https://li.quest/v1/routes?${params}`, {
     headers: { Accept: "application/json" },
   });
-  if (!res.ok) throw new Error(`Jumper HTTP ${res.status} ${await res.text()}`);
+
+  if (!res.ok) throw new Error(`Jumper: HTTP ${res.status}`);
   const data = await res.json();
+
   const route = data.routes?.[0];
-  if (!route) throw new Error("Jumper: routes[] empty");
+  if (!route) throw new Error("Jumper: No routes found");
 
   const gasCostUSD = parseFloat(route.gasCostUSD || "3");
   const steps = route.steps || [];
-  const totalFeeCost = steps.reduce(
+  const feeCost = steps.reduce(
     (sum, s) => sum + parseFloat(s.estimate?.feeCosts?.[0]?.amountUSD || "0"),
     0
   );
@@ -453,8 +653,8 @@ async function fetchJumperQuote(fromChainId, toChainId, token, amount, env) {
     name: "Jumper",
     icon: "🦘",
     provider: "jumper",
-    totalCost: gasCostUSD + totalFeeCost + 2, // slight buffer
-    bridgeFee: totalFeeCost + 2,
+    totalCost: gasCostUSD + feeCost + 2,
+    bridgeFee: feeCost + 2,
     gasFee: gasCostUSD,
     estimatedTime: `${Math.ceil(
       (route.steps?.[0]?.estimate?.executionDuration || 300) / 60
@@ -465,65 +665,17 @@ async function fetchJumperQuote(fromChainId, toChainId, token, amount, env) {
   };
 }
 
-// 3) Socket (free public)
-async function fetchSocketQuote(fromChainId, toChainId, token, amount, env) {
-  const tokenConfig = TOKENS[token];
-  if (!tokenConfig) throw new Error("Socket: unknown token");
-
-  const fromToken =
-    typeof tokenConfig.address === "object"
-      ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
-      : tokenConfig.address;
-  const toToken =
-    typeof tokenConfig.address === "object"
-      ? tokenConfig.address[toChainId] || tokenConfig.address[1]
-      : tokenConfig.address;
-  const amountInWei = toUnits(amount, tokenConfig.decimals);
-
-  const params = new URLSearchParams({
-    fromChainId: String(fromChainId),
-    fromTokenAddress: fromToken,
-    toChainId: String(toChainId),
-    toTokenAddress: toToken,
-    fromAmount: amountInWei,
-    userAddress:
-      env.FEE_RECEIVER_ADDRESS || "0x0000000000000000000000000000000000000000",
-    uniqueRoutesPerBridge: "true",
-    sort: "output",
-    singleTxOnly: "false",
-  });
-
-  const res = await fetch(`https://api.socket.tech/v2/quote?${params}`, {
-    headers: { Accept: "application/json" },
-  });
-  if (!res.ok) throw new Error(`Socket HTTP ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  const route = data.result?.routes?.[0];
-  if (!route) throw new Error("Socket: result.routes[] empty");
-
-  const totalGas = parseFloat(route.totalGasFeesInUsd || "0");
-  const bridgeFee = parseFloat(
-    route.userTxs?.[0]?.protocolFees?.feesInUsd || "0"
-  );
-
-  return {
-    name: "Socket",
-    icon: "🔌",
-    provider: "socket",
-    totalCost: totalGas + bridgeFee || 5,
-    bridgeFee,
-    gasFee: totalGas,
-    estimatedTime: `${Math.ceil((route.serviceTime || 360) / 60)} mins`,
-    security: "Multi-sig",
-    liquidity: "High",
-    route: route.usedBridgeNames?.join(" → ") || "Socket Bridge",
-  };
-}
-
-// 4) Squid Router (free public)
-async function fetchSquidQuote(fromChainId, toChainId, token, amount, env) {
-  const tokenConfig = TOKENS[token];
-  if (!tokenConfig) throw new Error("Squid: unknown token");
+// 3. Squid - Public API (sometimes has Cloudflare protection)
+async function fetchSquidQuote(
+  fromChainId,
+  toChainId,
+  token,
+  amount,
+  env,
+  sender
+) {
+  const tokenCfg = TOKENS[token];
+  if (!tokenCfg) throw new Error("Squid: unknown token");
 
   const squidChainMap = {
     1: "Ethereum",
@@ -534,94 +686,479 @@ async function fetchSquidQuote(fromChainId, toChainId, token, amount, env) {
     43114: "Avalanche",
     8453: "base",
   };
+
   if (!squidChainMap[fromChainId] || !squidChainMap[toChainId]) {
-    throw new Error("Squid: unsupported chain id");
+    throw new Error("Squid: Chain not supported");
   }
 
-  const fromToken =
-    typeof tokenConfig.address === "object"
-      ? tokenConfig.address[fromChainId] || tokenConfig.address[1]
-      : tokenConfig.address;
-  const toToken =
-    typeof tokenConfig.address === "object"
-      ? tokenConfig.address[toChainId] || tokenConfig.address[1]
-      : tokenConfig.address;
+  const fromToken = getTokenAddress(token, fromChainId);
+  const toToken = getTokenAddress(token, toChainId);
 
-  const requestBody = {
+  const body = {
     fromChain: squidChainMap[fromChainId],
     toChain: squidChainMap[toChainId],
-    fromToken: fromToken,
-    toToken: toToken,
-    fromAmount: toUnits(amount, tokenConfig.decimals),
-    slippage: 1,
+    fromToken,
+    toToken,
+    fromAmount: toUnits(amount, tokenCfg.decimals),
+    fromAddress: sender,
+    slippage: parseInt(CONFIG.DEFAULT_SLIPPAGE),
     enableExpress: true,
-    prefer: ["FASTEST"],
   };
 
-  const res = await fetch("https://api.squidrouter.com/v1/route", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(requestBody),
+  const res = await retryWithBackoff(async () => {
+    return await fetchWithTimeout("https://api.squidrouter.com/v1/route", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "User-Agent": "BridgeAggregator/4.0",
+      },
+      body: JSON.stringify(body),
+    });
   });
-  if (!res.ok) throw new Error(`Squid HTTP ${res.status} ${await res.text()}`);
 
+  if (!res.ok) throw new Error(`Squid: HTTP ${res.status}`);
   const data = await res.json();
+
   const route = data.route;
-  if (!route) throw new Error("Squid: route missing");
+  if (!route) throw new Error("Squid: No route found");
 
   const gasCost = parseFloat(route.estimate?.gasCosts?.[0]?.amountUSD || "3");
   const feeCost = parseFloat(route.estimate?.feeCosts?.[0]?.amountUSD || "2");
-  const totalCost = parseFloat(
-    route.estimate?.totalCostUSD || gasCost + feeCost
-  );
 
   return {
     name: "Squid",
     icon: "🦑",
     provider: "squid",
-    totalCost: totalCost || 5,
+    totalCost: gasCost + feeCost,
     bridgeFee: feeCost,
     gasFee: gasCost,
     estimatedTime: `${Math.ceil(
       (route.estimate?.estimatedRouteDuration || 420) / 60
     )} mins`,
-    security: "Axelar Network",
+    security: "Axelar",
     liquidity: "Medium",
     route: route.estimate?.routeType || "Squid Route",
   };
 }
 
-// ============================================
-// UTILS
-// ============================================
+// 4. Rango - Public API with demo key
+async function fetchRangoQuote(
+  fromChainId,
+  toChainId,
+  token,
+  amount,
+  env,
+  sender
+) {
+  const tokenCfg = TOKENS[token];
+  if (!tokenCfg) throw new Error("Rango: unknown token");
+
+  const chainNames = {
+    1: "ETH",
+    137: "POLYGON",
+    42161: "ARBITRUM",
+    10: "OPTIMISM",
+    56: "BSC",
+    43114: "AVAX_CCHAIN",
+    8453: "BASE",
+  };
+
+  const fromBlockchain = chainNames[fromChainId];
+  const toBlockchain = chainNames[toChainId];
+
+  if (!fromBlockchain || !toBlockchain) {
+    throw new Error("Rango: Chain not supported");
+  }
+
+  const params = new URLSearchParams({
+    from: `${fromBlockchain}.${token}`,
+    to: `${toBlockchain}.${token}`,
+    amount: toUnits(amount, tokenCfg.decimals),
+    fromAddress: sender,
+    slippage: CONFIG.DEFAULT_SLIPPAGE,
+    apiKey: "c6381a79-2817-4602-83bf-6a641a409e32", // Public demo key
+  });
+
+  const res = await fetchWithTimeout(
+    `https://api.rango.exchange/routing/best?${params}`,
+    {
+      headers: {
+        Accept: "application/json",
+        "X-API-KEY": "c6381a79-2817-4602-83bf-6a641a409e32",
+      },
+    }
+  );
+
+  if (!res.ok) throw new Error(`Rango: HTTP ${res.status}`);
+  const data = await res.json();
+
+  if (data.error) throw new Error(`Rango: ${data.error}`);
+  if (!data.result) throw new Error("Rango: No route found");
+
+  const result = data.result;
+  const totalFee = parseFloat(result.fee || "10");
+  const gasPrice = parseFloat(result.estimatedGas || "5");
+
+  return {
+    name: "Rango",
+    icon: "🔄",
+    provider: "rango",
+    totalCost: totalFee + gasPrice,
+    bridgeFee: totalFee,
+    gasFee: gasPrice,
+    estimatedTime: `${Math.ceil(
+      (result.estimatedTimeInSeconds || 300) / 60
+    )} mins`,
+    security: "Multi-route",
+    liquidity: "High",
+    route: result.swapperGroups?.[0]?.swappers?.[0]?.swapperId || "Rango Route",
+  };
+}
+
+// 5. Via Protocol - Public API
+async function fetchViaQuote(
+  fromChainId,
+  toChainId,
+  token,
+  amount,
+  env,
+  sender
+) {
+  const tokenCfg = TOKENS[token];
+  if (!tokenCfg) throw new Error("Via: unknown token");
+
+  const fromToken = getTokenAddress(token, fromChainId);
+  const toToken = getTokenAddress(token, toChainId);
+
+  const params = new URLSearchParams({
+    fromChain: fromChainId,
+    toChain: toChainId,
+    fromToken,
+    toToken,
+    fromAmount: toUnits(amount, tokenCfg.decimals),
+    fromAddress: sender,
+    slippage: CONFIG.DEFAULT_SLIPPAGE,
+  });
+
+  const res = await fetchWithTimeout(
+    `https://router-api.via.exchange/api/v2/quote?${params}`,
+    { headers: { Accept: "application/json" } }
+  );
+
+  if (!res.ok) throw new Error(`Via: HTTP ${res.status}`);
+  const data = await res.json();
+
+  if (!data || data.error) throw new Error(`Via: ${data?.error || "No route"}`);
+
+  const totalCost = parseFloat(data.totalCost || "10");
+  const fees = parseFloat(data.fees?.totalFee || "5");
+  const gas = parseFloat(data.gasPrice || "5");
+
+  return {
+    name: "Via Protocol",
+    icon: "🛤️",
+    provider: "via",
+    totalCost: totalCost || fees + gas,
+    bridgeFee: fees,
+    gasFee: gas,
+    estimatedTime: `${Math.ceil((data.estimatedTime || 300) / 60)} mins`,
+    security: "Audited",
+    liquidity: "Medium",
+    route: data.routes?.[0]?.name || "Via Route",
+  };
+}
+
+// 6. Rubic - Public API (rate limited)
+async function fetchRubicQuote(
+  fromChainId,
+  toChainId,
+  token,
+  amount,
+  env,
+  sender
+) {
+  const tokenCfg = TOKENS[token];
+  if (!tokenCfg) throw new Error("Rubic: unknown token");
+
+  const blockchainNames = {
+    1: "ETHEREUM",
+    137: "POLYGON",
+    42161: "ARBITRUM",
+    10: "OPTIMISM",
+    56: "BINANCE_SMART_CHAIN",
+    43114: "AVALANCHE",
+    8453: "BASE",
+  };
+
+  if (!blockchainNames[fromChainId] || !blockchainNames[toChainId]) {
+    throw new Error("Rubic: Chain not supported");
+  }
+
+  const fromToken = getTokenAddress(token, fromChainId);
+  const toToken = getTokenAddress(token, toChainId);
+
+  const body = {
+    srcTokenAddress: fromToken,
+    srcTokenAmount: toUnits(amount, tokenCfg.decimals),
+    srcTokenBlockchain: blockchainNames[fromChainId],
+    dstTokenAddress: toToken,
+    dstTokenBlockchain: blockchainNames[toChainId],
+    fromAddress: sender,
+    slippage: parseFloat(CONFIG.DEFAULT_SLIPPAGE),
+  };
+
+  const res = await fetchWithTimeout(
+    "https://api-v2.rubic.exchange/api/routes/cross-chain/calculate",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if (!res.ok) throw new Error(`Rubic: HTTP ${res.status}`);
+  const data = await res.json();
+
+  if (!data.route) throw new Error("Rubic: No route found");
+
+  const route = data.route;
+  const gasFee = parseFloat(route.gasUSD || "5");
+  const platformFee = parseFloat(route.platformFee?.amount || "0");
+
+  return {
+    name: "Rubic",
+    icon: "💎",
+    provider: "rubic",
+    totalCost: gasFee + platformFee,
+    bridgeFee: platformFee,
+    gasFee: gasFee,
+    estimatedTime: `${Math.ceil((route.duration || 300) / 60)} mins`,
+    security: "Multi-chain",
+    liquidity: "Medium",
+    route: route.type || "Rubic Route",
+  };
+}
+
+// 7. 1inch - Requires API key (free tier available)
+async function fetch1inchQuote(
+  fromChainId,
+  toChainId,
+  token,
+  amount,
+  env,
+  sender
+) {
+  if (!env.ONEINCH_API_KEY) {
+    throw new Error("1inch: API key required");
+  }
+
+  const tokenCfg = TOKENS[token];
+  if (!tokenCfg) throw new Error("1inch: unknown token");
+
+  // 1inch Fusion API supports cross-chain swaps
+  const fromToken = getTokenAddress(token, fromChainId);
+  const toToken = getTokenAddress(token, toChainId);
+
+  const params = new URLSearchParams({
+    fromTokenAddress: fromToken,
+    toTokenAddress: toToken,
+    amount: toUnits(amount, tokenCfg.decimals),
+    fromAddress: sender,
+    slippage: CONFIG.DEFAULT_SLIPPAGE,
+  });
+
+  const res = await fetchWithTimeout(
+    `https://api.1inch.dev/fusion/v1.0/${fromChainId}/quote?${params}`,
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${env.ONEINCH_API_KEY}`,
+      },
+    }
+  );
+
+  if (!res.ok) throw new Error(`1inch: HTTP ${res.status}`);
+  const data = await res.json();
+
+  const estimatedGas = parseFloat(data.estimatedGas || "100000") * 0.00001;
+
+  return {
+    name: "1inch",
+    icon: "1️⃣",
+    provider: "1inch",
+    totalCost: estimatedGas + 3,
+    bridgeFee: 3,
+    gasFee: estimatedGas,
+    estimatedTime: "3-5 mins",
+    security: "Fusion",
+    liquidity: "High",
+    route: "1inch Fusion",
+  };
+}
+
+// 8. OpenOcean - Public API
+async function fetchOpenOceanQuote(
+  fromChainId,
+  toChainId,
+  token,
+  amount,
+  env,
+  sender
+) {
+  const tokenCfg = TOKENS[token];
+  if (!tokenCfg) throw new Error("OpenOcean: unknown token");
+
+  const chainNames = {
+    1: "eth",
+    137: "polygon",
+    42161: "arbitrum",
+    10: "optimism",
+    56: "bsc",
+    43114: "avax",
+    8453: "base",
+  };
+
+  if (!chainNames[fromChainId] || !chainNames[toChainId]) {
+    throw new Error("OpenOcean: Chain not supported");
+  }
+
+  const fromToken = getTokenAddress(token, fromChainId);
+  const toToken = getTokenAddress(token, toChainId);
+
+  const params = new URLSearchParams({
+    inTokenAddress: fromToken,
+    outTokenAddress: toToken,
+    amount: amount,
+    gasPrice: "5",
+    slippage: CONFIG.DEFAULT_SLIPPAGE,
+    account: sender,
+  });
+
+  const res = await fetchWithTimeout(
+    `https://open-api.openocean.finance/v3/cross/quote?${params}`,
+    { headers: { Accept: "application/json" } }
+  );
+
+  if (!res.ok) throw new Error(`OpenOcean: HTTP ${res.status}`);
+  const data = await res.json();
+
+  if (data.code !== 200 || !data.data) {
+    throw new Error(`OpenOcean: ${data.error || "No route"}`);
+  }
+
+  const route = data.data;
+  const estimatedGas = parseFloat(route.estimatedGas || "5");
+
+  return {
+    name: "OpenOcean",
+    icon: "🌊",
+    provider: "openocean",
+    totalCost: estimatedGas + 3,
+    bridgeFee: 3,
+    gasFee: estimatedGas,
+    estimatedTime: "5-10 mins",
+    security: "Aggregated",
+    liquidity: "Medium",
+    route: "OpenOcean Cross-Chain",
+  };
+}
+
+// ===============================================
+// UTILITY FUNCTIONS
+// ===============================================
 
 function generateReferralUrl(bridge, env) {
   const referralId =
     env.FEE_RECEIVER_ADDRESS || env.INTEGRATOR_NAME || "bridgeaggregator";
-  const base = {
-    lifi: `https://jumper.exchange/?fromChain=1&toChain=137&integrator=${referralId}`,
+
+  const urls = {
+    lifi: `https://jumper.exchange/?ref=${referralId}`,
     jumper: `https://jumper.exchange/?ref=${referralId}`,
-    socket: `https://socketbridge.com/?ref=${referralId}`,
     squid: `https://app.squidrouter.com/?ref=${referralId}`,
-    default: "#",
+    rango: `https://rango.exchange/?ref=${referralId}`,
+    via: `https://via.exchange/?ref=${referralId}`,
+    rubic: `https://app.rubic.exchange/?ref=${referralId}`,
+    "1inch": `https://app.1inch.io/?ref=${referralId}`,
+    openocean: `https://openocean.finance/?ref=${referralId}`,
   };
-  return base[bridge.provider] || base.default;
+
+  return urls[bridge.provider] || "#";
 }
 
 function handleStatus(env) {
+  const providers = {};
+
+  for (const [key, config] of Object.entries(CONFIG.PROVIDERS)) {
+    const status = config.enabled
+      ? config.requiresAuth && !env[`${key}_API_KEY`]
+        ? "Disabled (no key)"
+        : "Active"
+      : "Disabled";
+    providers[key.toLowerCase()] = status;
+  }
+
   return {
     status: "operational",
-    version: "3.1.0",
+    version: "4.0",
     environment: env.ENVIRONMENT || "production",
     timestamp: new Date().toISOString(),
-    integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
-    feeReceiver: env.FEE_RECEIVER_ADDRESS || "Not configured",
-    feePercentage: env.FEE_PERCENTAGE || "0.003",
-    apis: {
-      lifi: env.LIFI_API_KEY ? "Active (with API key)" : "Inactive",
-      jumper: "Active (free public API)",
-      socket: "Active (free public API)",
-      squid: "Active (free public API)",
+    settings: {
+      integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
+      feeReceiver: env.FEE_RECEIVER_ADDRESS || "Not configured",
+      quoteAddress: env.QUOTE_FROM_ADDRESS
+        ? "Configured"
+        : "Using zero address",
+    },
+    providers,
+    features: {
+      caching: "30 second TTL",
+      rateLimit: "Staggered requests",
+      retry: `${CONFIG.RETRY_ATTEMPTS} attempts with backoff`,
+      timeout: `${CONFIG.REQUEST_TIMEOUT}ms per request`,
     },
   };
+}
+
+function getActiveProviders(env) {
+  const active = [];
+
+  for (const [key, config] of Object.entries(CONFIG.PROVIDERS)) {
+    if (config.enabled) {
+      const needsAuth = config.requiresAuth;
+      const hasAuth = env[`${key}_API_KEY`];
+
+      active.push({
+        name: key,
+        status: needsAuth && !hasAuth ? "Limited" : "Active",
+        priority: config.priority,
+        requiresAuth: needsAuth,
+        authConfigured: needsAuth ? hasAuth : "N/A",
+        rateLimit: getRateLimit(key.toLowerCase(), env),
+      });
+    }
+  }
+
+  return {
+    count: active.length,
+    providers: active.sort((a, b) => a.priority - b.priority),
+  };
+}
+
+function getRateLimit(provider, env) {
+  const limits = {
+    lifi: env.LIFI_API_KEY ? "100 req/min" : "30 req/min",
+    jumper: "30 req/min (shared with LI.FI)",
+    squid: "20 req/min",
+    rango: "60 req/min (demo key)",
+    via: "30 req/min",
+    rubic: "10 req/min",
+    "1inch": env.ONEINCH_API_KEY ? "30 req/sec" : "Disabled",
+    openocean: "30 req/min",
+  };
+
+  return limits[provider] || "Unknown";
 }
