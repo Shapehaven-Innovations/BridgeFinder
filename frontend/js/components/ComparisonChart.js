@@ -1,5 +1,15 @@
 // frontend/js/components/ComparisonChart.js - Visual Comparison Chart
 
+// Add formatNumber function at the top of the file:
+function formatNumber(value, decimals = 2) {
+  const num = parseFloat(value);
+  if (isNaN(num)) return value;
+  const formatted = num.toFixed(decimals);
+  const parts = formatted.split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.join(".");
+}
+
 export class ComparisonChart {
   static render(bridges) {
     if (!bridges || bridges.length === 0) return "";
@@ -29,8 +39,8 @@ export class ComparisonChart {
               <div class="bar-item">
                 <div class="bar-container">
                   <div class="bar" style="height: ${barHeight}%">
-                    <span class="bar-value">$${bridge.totalCost.toFixed(
-                      2
+                    <<span class="bar-value">$${formatNumber(
+                      bridge.totalCost
                     )}</span>
                   </div>
                   <div class="time-indicator" style="background: ${timeColor}">

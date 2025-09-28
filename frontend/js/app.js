@@ -10,6 +10,26 @@ import { PriceAlertPlugin } from "./plugins/PriceAlertPlugin.js";
 import { ProtocolFilter } from "./components/ProtocolFilter.js";
 import { ComparisonChart } from "./components/ComparisonChart.js";
 
+/**
+ * Format number with thousand separators
+ * @param {number|string} value - Number to format
+ * @param {number} decimals - Number of decimal places (default: 2)
+ * @returns {string} Formatted number with commas
+ */
+function formatNumber(value, decimals = 2) {
+  const num = parseFloat(value);
+  if (isNaN(num)) return value;
+
+  // Format with decimals first
+  const formatted = num.toFixed(decimals);
+
+  // Add thousand separators
+  const parts = formatted.split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+  return parts.join(".");
+}
+
 class BridgeApp {
   constructor() {
     this.state = new StateManager({
@@ -396,16 +416,16 @@ class BridgeApp {
       return;
     }
 
-    document.getElementById(
-      "bestPrice"
-    ).textContent = `$${data.summary.bestPrice.toFixed(2)}`;
-    document.getElementById(
-      "avgPrice"
-    ).textContent = `$${data.summary.averagePrice.toFixed(2)}`;
+    document.getElementById("bestPrice").textContent = `$${formatNumber(
+      data.summary.bestPrice
+    )}`;
+    document.getElementById("avgPrice").textContent = `$${formatNumber(
+      data.summary.averagePrice
+    )}`;
     document.getElementById("routeCount").textContent = data.bridges.length;
-    document.getElementById("maxSavings").textContent = `$${(
+    document.getElementById("maxSavings").textContent = `$${formatNumber(
       data.summary.worstPrice - data.summary.bestPrice
-    ).toFixed(2)}`;
+    )}`;
 
     statsSection.classList.remove("hidden");
   }

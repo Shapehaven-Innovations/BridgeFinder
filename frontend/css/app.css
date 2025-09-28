@@ -99,7 +99,8 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+    "Helvetica Neue", Arial, "Noto Color Emoji", "Apple Color Emoji",
+    "Segoe UI Emoji", sans-serif;
   background: var(--bg);
   color: var(--text);
   transition: background 0.3s ease, color 0.3s ease;
@@ -149,10 +150,22 @@ body {
   align-items: center;
   gap: 0.75rem;
   letter-spacing: -0.025em;
+}
+
+.logo span:not(.version) {
   background: linear-gradient(135deg, var(--primary), var(--primary-light));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.logo::before {
+  content: "🌉";
+  font-size: var(--text-2xl);
+  display: inline-block;
+  font-style: normal;
+  font-weight: normal;
+  line-height: 1;
 }
 
 .version {
@@ -390,7 +403,7 @@ body {
 }
 
 /* ===============================================
-   Protocol Filter - Interactive Selection
+   Protocol Filter - Interactive Selection (FIXED)
    =============================================== */
 .protocol-filter {
   background: var(--bg-card);
@@ -439,6 +452,7 @@ body {
   position: relative;
   font-weight: 500;
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
 
 .protocol-chip:hover {
@@ -454,23 +468,47 @@ body {
   width: 100%;
   height: 100%;
   cursor: pointer;
+  z-index: 2;
 }
 
-.protocol-chip input:checked + span {
-  color: white;
+.protocol-chip span {
+  position: relative;
+  z-index: 1;
+  transition: var(--transition);
 }
 
-.protocol-chip input:checked ~ * {
+.protocol-chip::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: linear-gradient(
     135deg,
     var(--primary) 0%,
     var(--primary-light) 100%
   );
-  color: white;
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+  z-index: 0;
 }
 
-.protocol-chip input:checked ~ .protocol-chip {
+.protocol-chip input:checked ~ span {
+  color: white;
+  font-weight: 600;
+}
+
+.protocol-chip input:checked ~ ::before {
+  transform: scaleX(1);
+}
+
+.protocol-chip:has(input:checked) {
   border-color: var(--primary);
+}
+
+.protocol-chip:has(input:checked)::before {
+  transform: scaleX(1);
 }
 
 /* ===============================================
@@ -560,7 +598,7 @@ body {
 }
 
 /* ===============================================
-   Chart Container - Data Visualization
+   Chart Container - Data Visualization (FIXED)
    =============================================== */
 .chart-container {
   background: var(--bg-card);
@@ -582,10 +620,13 @@ body {
   display: flex;
   align-items: flex-end;
   gap: 1rem;
-  height: 220px;
+  height: 240px;
   margin-bottom: 1.5rem;
+  margin-top: 2rem;
   overflow-x: auto;
   padding-bottom: 0.75rem;
+  padding-top: 2rem;
+  position: relative;
 }
 
 .bar-item {
@@ -609,10 +650,11 @@ body {
 .bar-container {
   position: relative;
   width: 100%;
-  height: 180px;
+  height: 160px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  margin-top: 30px;
 }
 
 .bar {
@@ -647,7 +689,7 @@ body {
 
 .time-indicator {
   position: absolute;
-  bottom: -25px;
+  top: -28px;
   left: 50%;
   transform: translateX(-50%);
   font-size: var(--text-xs);
@@ -657,6 +699,7 @@ body {
   color: white;
   font-weight: 600;
   box-shadow: var(--shadow-sm);
+  z-index: 10;
 }
 
 .bar-label {

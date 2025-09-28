@@ -1,5 +1,15 @@
 // frontend/js/components/BridgeCard.js - Enhanced Bridge Card Component
 
+//Add formatNumber function
+function formatNumber(value, decimals = 2) {
+  const num = parseFloat(value);
+  if (isNaN(num)) return value;
+  const formatted = num.toFixed(decimals);
+  const parts = formatted.split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.join(".");
+}
+
 export class BridgeCard {
   static render(bridge, isBest = false) {
     const protocolBadge = bridge.protocol
@@ -36,16 +46,16 @@ export class BridgeCard {
             </div>
           </div>
           <div class="fee-display">
-            <div class="total-fee">$${bridge.totalCost.toFixed(2)}</div>
+            <div class="total-fee">$${formatNumber(bridge.totalCost)}</div>
             <div class="fee-breakdown">
-              Bridge: $${bridge.bridgeFee.toFixed(
-                2
-              )} | Gas: $${bridge.gasFee.toFixed(2)}
+             Bridge: $${formatNumber(bridge.bridgeFee)}|Gas: $${formatNumber(
+      bridge.gasFee
+    )}
             </div>
             ${
               bridge.savings > 0
-                ? `<div class="savings">Save $${bridge.savings.toFixed(
-                    2
+                ? `<div class="savings">Save $${formatNumber(
+                    bridge.savings
                   )}</div>`
                 : ""
             }
