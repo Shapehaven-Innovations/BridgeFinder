@@ -1,13 +1,4 @@
 // ===== worker/adapters/lifi.js =====
-import { BridgeAdapter } from "./base.js";
-import { CONFIG, TOKENS } from "../config.js";
-
-export class LiFiAdapter extends BridgeAdapter {
-  constructor(config) {
-    super("LI.FI", config);
-    this.icon = "🔷";
-  }
-
   async getQuote(params, env) {
     await this.checkRateLimit();
 
@@ -28,36 +19,58 @@ export class LiFiAdapter extends BridgeAdapter {
       fromAddress: sender,
       slippage: CONFIG.DEFAULT_SLIPPAGE,
       integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
+   // Optional: reduce weird routes
+   // maxPriceImpact: "0.05", // 5%
+   // allowBridges: "stargate,cctp", // example
     });
 
     const headers = { Accept: "application/json" };
-    if (env.LIFI_API_KEY) {
-      headers["x-lifi-api-key"] = env.LIFI_API_KEY;
-    }
+    if (env.LIFI_API_KEY) headers["x-lifi-api-key"] = env.LIFI_API_KEY;
 
-    const res = await this.fetchWithTimeout(
-      `https://li.quest/v1/quote?${queryParams}`,
-      { headers }
-    );
-
+    const res = await this.fetchWithTimeout(`https://li.quest/v1/quote?${queryParams}`, { headers });
     if (!res.ok) throw new Error(`LI.FI: HTTP ${res.status}`);
 
     const data = await res.json();
     if (!data?.estimate) throw new Error("LI.FI: Invalid response");
 
     const est = data.estimate;
-    const gasCostUSD = parseFloat(est.gasCosts?.[0]?.amountUSD || "0");
-    const feeCostUSD = parseFloat(est.feeCosts?.[0]?.amountUSD || "0");
 
+ // Helpers
+ const sumUSD = (arr) =>
+   (arr || []).reduce((s, x) => s + (parseFloat(x?.amountUSD || "0") || 0), 0);
+ const gasCostUSD = sumUSD(est.gasCosts);
+ const networkFeeUSD = sumUSD(est.networkFees); // present on some routes
+ const feeCostUSD = (est.feeCosts || [])
+   // ignore fees that LI.FI marks as "included" in swap amounts
+   .filter((f) => !f?.included)
+   .reduce((s, f) => s + (parseFloat(f?.amountUSD || "0") || 0), 0);
+ const summedCostsUSD = gasCostUSD + networkFeeUSD + feeCostUSD;
+ // Sanity check using LI.FI's own USD in/out
+ const fromUsd = parseFloat(est.fromAmountUSD || "0") || 0;
+ const toUsd   = parseFloat(est.toAmountUSD   || "0") || 0;
+ const impliedCostUSD = Math.max(0, fromUsd - toUsd);
+ // Use the larger of the two as the displayed "totalCost"
+ // (summedCosts sometimes misses AMM price impact; the USD delta captures it)
+ const totalCostUSD = Math.max(summedCostsUSD, impliedCostUSD);
+ // Defensive: if cost is wildly higher than peers, mark as "isBest=false"
+ // The aggregator can still rank it by price later.
     return this.formatResponse({
-      totalCost: gasCostUSD + feeCostUSD,
-      bridgeFee: feeCostUSD,
-      gasFee: gasCostUSD,
+
+   totalCost: totalCostUSD,
+   bridgeFee: feeCostUSD,
+   gasFee: gasCostUSD + networkFeeUSD,
       estimatedTime: `${Math.ceil((est.executionDuration || 300) / 60)} mins`,
       security: "Audited",
       liquidity: "High",
       route: data.toolDetails?.name || "Best Route",
-      outputAmount: est.toAmount,
+
+   outputAmount: est.toAmount,         // still in smallest units
+   // Extra diagnostics, useful in the UI/console
+   meta: {
+     fromToken, toToken,
+     fromUsd, toUsd,
+     gasCostUSD, networkFeeUSD, feeCostUSD, summedCostsUSD, impliedCostUSD,
+     tool: data.toolDetails?.key || data.toolDetails?.name,
+   },
     });
   }
-}
