@@ -61,7 +61,7 @@ class BridgeApp {
       <div class="container">
         <header class="header">
           <div class="logo">
-            🌉 <span>Bridge Aggregator</span>
+          <span>Bridge Aggregator</span>
             <span class="version">v5.0</span>
           </div>
           <div class="header-actions">
