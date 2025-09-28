@@ -10,6 +10,11 @@
     const toToken = this.getTokenAddress(token, toChainId);
     const fromAmount = this.toUnits(amount, tokenCfg.decimals);
 
+      
+  if (!fromToken || !toToken) {
+    throw new Error(`LI.FI: token mapping missing for ${token} on chain ${fromChainId}->${toChainId}`);
+  }
+
     const queryParams = new URLSearchParams({
       fromChain: String(fromChainId),
       toChain: String(toChainId),
@@ -41,7 +46,7 @@
  const gasCostUSD = sumUSD(est.gasCosts);
  const networkFeeUSD = sumUSD(est.networkFees); // present on some routes
  const feeCostUSD = (est.feeCosts || [])
-   // ignore fees that LI.FI marks as "included" in swap amounts
+   
    .filter((f) => !f?.included)
    .reduce((s, f) => s + (parseFloat(f?.amountUSD || "0") || 0), 0);
  const summedCostsUSD = gasCostUSD + networkFeeUSD + feeCostUSD;
@@ -49,11 +54,9 @@
  const fromUsd = parseFloat(est.fromAmountUSD || "0") || 0;
  const toUsd   = parseFloat(est.toAmountUSD   || "0") || 0;
  const impliedCostUSD = Math.max(0, fromUsd - toUsd);
- // Use the larger of the two as the displayed "totalCost"
- // (summedCosts sometimes misses AMM price impact; the USD delta captures it)
+ 
  const totalCostUSD = Math.max(summedCostsUSD, impliedCostUSD);
- // Defensive: if cost is wildly higher than peers, mark as "isBest=false"
- // The aggregator can still rank it by price later.
+
     return this.formatResponse({
 
    totalCost: totalCostUSD,
@@ -63,7 +66,6 @@
       security: "Audited",
       liquidity: "High",
       route: data.toolDetails?.name || "Best Route",
-
    outputAmount: est.toAmount,         // still in smallest units
    // Extra diagnostics, useful in the UI/console
    meta: {
