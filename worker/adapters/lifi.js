@@ -50,7 +50,7 @@ class LiFiAdapter extends BridgeAdapter {
       toToken,
       fromAmount,
       fromAddress: sender,
-      slippage: CONFIG.DEFAULT_SLIPPAGE || "0..1",
+      slippage: CONFIG.DEFAULT_SLIPPAGE || "0.01",
       integrator: env?.INTEGRATOR_NAME || "BridgeAggregator",
       skipSimulation: "false",
     });
@@ -94,7 +94,6 @@ class LiFiAdapter extends BridgeAdapter {
     // Extract protocol/bridge fees not included in gas
     const feeCostUSD = (est.feeCosts || [])
       .filter((f) => !f?.included) // Only count fees NOT included in the swap
-
       .reduce((s, f) => {
         const val = parseFloat(f?.amountUSD || "0");
         return s + (isNaN(val) ? 0 : val);
@@ -138,11 +137,11 @@ class LiFiAdapter extends BridgeAdapter {
         toToken,
         fromUsd,
         toUsd,
-        gasCostUSD,
-        networkFeeUSD,
-        feeCostUSD,
-        summedCostsUSD,
-        impliedCostUSD,
+        gasCostUSD, // ~0.0004
+        networkFeeUSD, // 0
+        feeCostUSD, // 0 (since all fees are included)
+        summedCostsUSD, // ~0.0004
+        totalCostUSD, // ~0.0004 (not $302!)
         tool: data.toolDetails?.key || data.toolDetails?.name,
       },
     });
