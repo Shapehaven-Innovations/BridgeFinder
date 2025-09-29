@@ -93,7 +93,7 @@ class LiFiAdapter extends BridgeAdapter {
     const networkFeeUSD = sumUSD(est.networkFees);
     // Extract protocol/bridge fees not included in gas
     const feeCostUSD = (est.feeCosts || [])
-      .filter((f) => !f?.included)
+      .filter((f) => !f?.included) // Only count fees NOT included in the swap
 
       .reduce((s, f) => {
         const val = parseFloat(f?.amountUSD || "0");
@@ -109,10 +109,16 @@ class LiFiAdapter extends BridgeAdapter {
     if (isNaN(fromUsd) || isNaN(toUsd)) {
       console.warn("LI.FI: Missing or invalid USD values in estimate");
     }
-    const impliedCostUSD = Math.max(0, fromUsd - toUsd);
+    // Don't use the difference as cost - it includes the fees already!
+    // The actual cost is just the gas fees + any non-included protocol fees
+    const totalCostUSD = gasCostUSD + networkFeeUSD + feeCostUSD;
 
-    // Use maximum of calculated vs implied cost for safety
-    const totalCostUSD = Math.max(summedCostsUSD, impliedCostUSD);
+    // Log for debugging
+    if (env?.DEBUG) {
+      console.log(
+        `LI.FI costs: gas=$${gasCostUSD}, network=$${networkFeeUSD}, fees=$${feeCostUSD}, total=$${totalCostUSD}`
+      );
+    }
 
     // Round to reasonable precision for display
     const roundUSD = (val) => Math.round(val * 100) / 100;
