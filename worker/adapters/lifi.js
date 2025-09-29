@@ -75,6 +75,7 @@ class LiFiAdapter extends BridgeAdapter {
       );
     }
     const data = await res.json();
+    console.log("LI.FI raw response:", JSON.stringify(data, null, 2));
 
     if (!data?.estimate) {
       throw new Error(`LI.FI: Invalid response structure - missing estimate`);
