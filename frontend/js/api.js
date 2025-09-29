@@ -42,8 +42,15 @@ export class ApiClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("API Error Response:", errorText);
-        throw new Error(`API error: ${response.status} - ${errorText}`);
+        let errorDetail = errorText;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorDetail = errorJson.details || errorJson.error || errorText;
+        } catch (e) {
+          // Keep as text if not JSON
+        }
+        console.error("API Error Response:", response.status, errorDetail);
+        throw new Error(`Bridge comparison failed: ${errorDetail}`);
       }
 
       const data = await response.json();
