@@ -61,7 +61,7 @@ export class ZeroXAdapter extends BridgeAdapter {
 
       const res = await this.fetchWithTimeout(
         `https://api.0x.org/swap/v1/quote?${queryParams}`,
-        { headers }
+        { headers },
       );
 
       if (!res.ok) {

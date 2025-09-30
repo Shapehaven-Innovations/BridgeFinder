@@ -55,7 +55,7 @@ export class RangoAdapter extends BridgeAdapter {
             "API-KEY": "c6381a79-2817-4602-83bf-6a641a409e32", // Public demo key
           },
           body: JSON.stringify(body),
-        }
+        },
       );
 
       if (!res.ok) {
@@ -78,7 +78,7 @@ export class RangoAdapter extends BridgeAdapter {
         bridgeFee: feeUSD,
         gasFee: gasUSD,
         estimatedTime: `${Math.ceil(
-          (route.estimatedTimeInSeconds || 300) / 60
+          (route.estimatedTimeInSeconds || 300) / 60,
         )} mins`,
         security: "Multi-Protocol",
         liquidity: "Aggregated",

@@ -63,7 +63,7 @@ export class LiFiAdapter extends BridgeAdapter {
     try {
       res = await this.fetchWithTimeout(
         `https://li.quest/v1/quote?${queryParams}`,
-        { headers }
+        { headers },
       );
     } catch (error) {
       throw new Error(`LI.FI: Network error - ${error.message}`);
@@ -72,7 +72,7 @@ export class LiFiAdapter extends BridgeAdapter {
     if (!res.ok) {
       const errorBody = await res.text().catch(() => "No error details");
       throw new Error(
-        `LI.FI: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
+        `LI.FI: HTTP ${res.status} - ${errorBody.substring(0, 200)}`,
       );
     }
 

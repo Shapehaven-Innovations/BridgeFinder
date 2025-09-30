@@ -43,7 +43,7 @@ export class AdapterFactory {
     AdapterFactory.registerAdapter("JumperAdapter", JumperAdapter);
 
     console.log(
-      `✅ Registered ${AdapterFactory.adapters.size} bridge adapters`
+      `✅ Registered ${AdapterFactory.adapters.size} bridge adapters`,
     );
   }
 }

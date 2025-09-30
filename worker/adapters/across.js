@@ -43,7 +43,7 @@ export class AcrossAdapter extends BridgeAdapter {
           headers: {
             Accept: "application/json",
           },
-        }
+        },
       );
 
       if (!res.ok) {

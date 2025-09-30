@@ -24,16 +24,16 @@ export class AnalyticsPlugin {
     events.on("search:complete", (data) =>
       this.track("search_complete", {
         resultCount: data.bridges?.length,
-      })
+      }),
     );
     events.on("bridge:selected", (bridge) =>
       this.track("bridge_selected", {
         bridge: bridge.name,
         cost: bridge.totalCost,
-      })
+      }),
     );
     events.on("theme:changed", (theme) =>
-      this.track("theme_changed", { theme })
+      this.track("theme_changed", { theme }),
     );
   }
 
@@ -89,7 +89,7 @@ export class AnalyticsPlugin {
 
       // For now, just store in localStorage
       const stored = JSON.parse(
-        localStorage.getItem("bridge_analytics") || "[]"
+        localStorage.getItem("bridge_analytics") || "[]",
       );
       stored.push(data);
 

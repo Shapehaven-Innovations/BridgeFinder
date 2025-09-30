@@ -18,7 +18,7 @@ export class ProtocolFilter {
             <input type="checkbox" value="${protocol}" checked>
             <span>${protocol}</span>
           </label>
-        `
+        `,
           )
           .join("")}
       </div>

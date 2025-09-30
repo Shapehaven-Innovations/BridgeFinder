@@ -39,7 +39,7 @@ export class SocketAdapter extends BridgeAdapter {
     try {
       const res = await this.fetchWithTimeout(
         `https://api.socket.tech/v2/quote?${queryParams}`,
-        { headers }
+        { headers },
       );
 
       if (!res.ok) throw new Error(`Socket: HTTP ${res.status}`);

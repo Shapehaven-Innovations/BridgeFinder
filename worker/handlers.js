@@ -21,7 +21,7 @@ export async function handleCompare(request, env, debug) {
           error:
             "Missing required parameters (fromChainId, toChainId, token, amount)",
         },
-        400
+        400,
       );
     }
 
@@ -31,7 +31,7 @@ export async function handleCompare(request, env, debug) {
           success: false,
           error: "Source and destination chains must be different",
         },
-        400
+        400,
       );
     }
 
@@ -45,7 +45,7 @@ export async function handleCompare(request, env, debug) {
           details:
             "Set QUOTE_FROM_ADDRESS secret or pass fromAddress in request body",
         },
-        400
+        400,
       );
     }
 
@@ -126,7 +126,7 @@ export async function handleCompare(request, env, debug) {
           }
           return null;
         }
-      })
+      }),
     );
 
     // Process results
@@ -136,7 +136,7 @@ export async function handleCompare(request, env, debug) {
           r.status === "fulfilled" &&
           r.value &&
           r.value.totalCost > 0 &&
-          !r.value.failed
+          !r.value.failed,
       )
       .map((r) => r.value)
       .sort((a, b) => a.totalCost - b.totalCost);
@@ -146,7 +146,7 @@ export async function handleCompare(request, env, debug) {
           .filter(
             (r) =>
               r.status === "rejected" ||
-              (r.status === "fulfilled" && r.value?.failed)
+              (r.status === "fulfilled" && r.value?.failed),
           )
           .map((r, i) => ({
             provider: providerCalls[i].name,
@@ -203,7 +203,7 @@ export async function handleCompare(request, env, debug) {
         error: "Failed to compare bridges",
         details: error.message,
       },
-      500
+      500,
     );
   }
 }
@@ -235,7 +235,7 @@ export async function testAdapter(request, env) {
         success: false,
         error: error.message,
       },
-      500
+      500,
     );
   }
 }

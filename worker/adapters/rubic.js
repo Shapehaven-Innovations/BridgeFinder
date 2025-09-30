@@ -45,7 +45,7 @@ export class RubicAdapter extends BridgeAdapter {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(body),
-        }
+        },
       );
 
       if (!res.ok) {

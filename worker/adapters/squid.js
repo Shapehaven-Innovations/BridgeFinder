@@ -49,7 +49,7 @@ export class SquidAdapter extends BridgeAdapter {
             "x-integrator-id": env?.INTEGRATOR_NAME || "bridge-aggregator",
           },
           body: JSON.stringify(body),
-        }
+        },
       );
 
       if (!res.ok) {
@@ -66,7 +66,7 @@ export class SquidAdapter extends BridgeAdapter {
       const gasCostUSD =
         parseFloat(route.estimate.gasCosts?.amount || "0") / 1e6;
       const feeCostUSD = parseFloat(
-        route.estimate.feeCosts?.[0]?.amountUSD || "0"
+        route.estimate.feeCosts?.[0]?.amountUSD || "0",
       );
 
       return this.formatResponse({
@@ -74,7 +74,7 @@ export class SquidAdapter extends BridgeAdapter {
         bridgeFee: feeCostUSD,
         gasFee: gasCostUSD,
         estimatedTime: `${Math.ceil(
-          route.estimate.estimatedRouteDuration / 60
+          route.estimate.estimatedRouteDuration / 60,
         )} mins`,
         security: "Axelar GMP",
         liquidity: "High",

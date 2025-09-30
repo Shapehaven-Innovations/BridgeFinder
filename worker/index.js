@@ -88,7 +88,7 @@ export default {
           error: "Internal server error",
           message: err.message,
         },
-        500
+        500,
       );
     }
   },

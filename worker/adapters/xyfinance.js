@@ -20,7 +20,7 @@ export class XYFinanceAdapter extends BridgeAdapter {
 
     if (!fromToken || fromToken === "undefined") {
       throw new Error(
-        `XY Finance: No ${token} address on chain ${fromChainId}`
+        `XY Finance: No ${token} address on chain ${fromChainId}`,
       );
     }
     if (!toToken || toToken === "undefined") {
@@ -46,7 +46,7 @@ export class XYFinanceAdapter extends BridgeAdapter {
           headers: {
             Accept: "application/json",
           },
-        }
+        },
       );
 
       if (!res.ok) {

@@ -18,8 +18,8 @@ export class BridgeCard {
 
     const card = `
       <div class="bridge-card ${isBest ? "best" : ""}" data-bridge="${
-      bridge.name
-    }">
+        bridge.name
+      }">
         ${isBest ? '<div class="best-badge">✨ Best Option</div>' : ""}
         ${
           bridge.position
@@ -36,8 +36,8 @@ export class BridgeCard {
                 ?.toLowerCase()
                 .replace(/\s+/g, "-")}">🔒 ${bridge.security}</span>
               <span class="meta-item liquidity-${bridge.liquidity?.toLowerCase()}">💧 ${
-      bridge.liquidity
-    }</span>
+                bridge.liquidity
+              }</span>
               ${
                 bridge.route
                   ? `<span class="meta-item">📍 ${bridge.route}</span>`
@@ -49,13 +49,13 @@ export class BridgeCard {
             <div class="total-fee">$${formatNumber(bridge.totalCost)}</div>
             <div class="fee-breakdown">
              Bridge: $${formatNumber(bridge.bridgeFee)}|Gas: $${formatNumber(
-      bridge.gasFee
-    )}
+               bridge.gasFee,
+             )}
             </div>
             ${
               bridge.savings > 0
                 ? `<div class="savings">Save $${formatNumber(
-                    bridge.savings
+                    bridge.savings,
                   )}</div>`
                 : ""
             }

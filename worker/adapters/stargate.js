@@ -70,7 +70,7 @@ export class StargateAdapter extends BridgeAdapter {
             Accept: "application/json",
           },
           body: JSON.stringify(body),
-        }
+        },
       );
 
       if (!res.ok) {

@@ -41,10 +41,10 @@
   /* Enhanced Shadows for Depth */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1),
-    0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1),
-    0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-lg:
+    0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl:
+    0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
 
   /* Smooth Transitions */
   --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -98,12 +98,14 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "Noto Color Emoji", "Apple Color Emoji",
-    "Segoe UI Emoji", sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
   background: var(--bg);
   color: var(--text);
-  transition: background 0.3s ease, color 0.3s ease;
+  transition:
+    background 0.3s ease,
+    color 0.3s ease;
   line-height: 1.6;
   min-height: 100vh;
   font-size: var(--text-base);
@@ -204,7 +206,9 @@ body {
   transform: translateY(-2px);
   background: var(--bg-hover);
   border-color: var(--primary);
-  box-shadow: var(--shadow-lg), 0 0 20px var(--primary-glow);
+  box-shadow:
+    var(--shadow-lg),
+    0 0 20px var(--primary-glow);
 }
 
 .theme-toggle:active,
@@ -302,7 +306,9 @@ body {
 .form-control-sm:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 4px var(--primary-glow), var(--shadow);
+  box-shadow:
+    0 0 0 4px var(--primary-glow),
+    var(--shadow);
   transform: translateY(-1px);
 }
 
@@ -354,7 +360,9 @@ body {
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-3px);
-  box-shadow: 0 6px 20px var(--primary-glow), var(--shadow-xl);
+  box-shadow:
+    0 6px 20px var(--primary-glow),
+    var(--shadow-xl);
 }
 
 .btn-primary:hover:not(:disabled)::before {
@@ -567,7 +575,9 @@ body {
 .stat-card:hover {
   border-color: var(--primary);
   transform: translateY(-4px);
-  box-shadow: var(--shadow-xl), 0 0 20px var(--primary-glow);
+  box-shadow:
+    var(--shadow-xl),
+    0 0 20px var(--primary-glow);
 }
 
 .stat-card:hover::before {
@@ -792,7 +802,9 @@ body {
 
 .bridge-card:hover {
   transform: translateY(-4px) scale(1.01);
-  box-shadow: var(--shadow-xl), 0 0 30px var(--primary-glow);
+  box-shadow:
+    var(--shadow-xl),
+    0 0 30px var(--primary-glow);
   border-color: var(--primary);
   background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-hover) 100%);
 }
@@ -804,7 +816,9 @@ body {
     var(--bg-card) 0%,
     var(--success-glow) 100%
   );
-  box-shadow: var(--shadow-lg), 0 0 20px var(--success-glow);
+  box-shadow:
+    var(--shadow-lg),
+    0 0 20px var(--success-glow);
 }
 
 .best-badge {
@@ -1387,7 +1401,9 @@ body {
     var(--bg-card) 0%,
     var(--success-glow) 100%
   );
-  box-shadow: var(--shadow-xl), 0 0 20px var(--success-glow);
+  box-shadow:
+    var(--shadow-xl),
+    0 0 20px var(--success-glow);
 }
 
 .toast.error {
@@ -1397,7 +1413,9 @@ body {
     var(--bg-card) 0%,
     var(--error-glow) 100%
   );
-  box-shadow: var(--shadow-xl), 0 0 20px var(--error-glow);
+  box-shadow:
+    var(--shadow-xl),
+    0 0 20px var(--error-glow);
 }
 
 .toast.warning {
@@ -1407,13 +1425,17 @@ body {
     var(--bg-card) 0%,
     var(--warning-glow) 100%
   );
-  box-shadow: var(--shadow-xl), 0 0 20px var(--warning-glow);
+  box-shadow:
+    var(--shadow-xl),
+    0 0 20px var(--warning-glow);
 }
 
 .toast.info {
   border-color: var(--info);
   background: linear-gradient(135deg, var(--bg-card) 0%, var(--info-glow) 100%);
-  box-shadow: var(--shadow-xl), 0 0 20px var(--info-glow);
+  box-shadow:
+    var(--shadow-xl),
+    0 0 20px var(--info-glow);
 }
 
 @keyframes slide-out {

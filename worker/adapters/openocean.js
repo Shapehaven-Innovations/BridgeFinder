@@ -44,7 +44,7 @@ export class OpenOceanAdapter extends BridgeAdapter {
           headers: {
             Accept: "application/json",
           },
-        }
+        },
       );
 
       if (!res.ok) {

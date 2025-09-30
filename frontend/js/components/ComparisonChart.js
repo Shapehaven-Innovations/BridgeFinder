@@ -16,10 +16,10 @@ export class ComparisonChart {
 
     const maxCost = Math.max(...bridges.map((b) => b.totalCost));
     const minTime = Math.min(
-      ...bridges.map((b) => parseInt(b.estimatedTime) || 999)
+      ...bridges.map((b) => parseInt(b.estimatedTime) || 999),
     );
     const maxTime = Math.max(
-      ...bridges.map((b) => parseInt(b.estimatedTime) || 0)
+      ...bridges.map((b) => parseInt(b.estimatedTime) || 0),
     );
 
     return `
@@ -40,7 +40,7 @@ export class ComparisonChart {
                 <div class="bar-container">
                   <div class="bar" style="height: ${barHeight}%">
                     <<span class="bar-value">$${formatNumber(
-                      bridge.totalCost
+                      bridge.totalCost,
                     )}</span>
                   </div>
                   <div class="time-indicator" style="background: ${timeColor}">
@@ -50,8 +50,8 @@ export class ComparisonChart {
                 <div class="bar-label" title="${bridge.name}">
                   <span class="bar-icon">${bridge.icon}</span>
                   <span class="bar-name">${bridge.name.substring(0, 8)}${
-                bridge.name.length > 8 ? "..." : ""
-              }</span>
+                    bridge.name.length > 8 ? "..." : ""
+                  }</span>
                 </div>
               </div>
             `;

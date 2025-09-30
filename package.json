@@ -7,11 +7,13 @@
     "dev": "npx live-server frontend --port=3000",
     "worker:dev": "cd worker && wrangler dev",
     "worker:deploy": "cd worker && wrangler deploy",
-    "worker:tail": "cd worker && wrangler tail"
+    "worker:tail": "cd worker && wrangler tail",
+    "format": "prettier --write \"./**/*.{js,jsx,ts,tsx,json,css,md}\""
   },
   "devDependencies": {
-    "wrangler": "^3.0.0",
-    "live-server": "^1.2.2"
+    "live-server": "^1.2.2",
+    "prettier": "^3.6.2",
+    "wrangler": "^3.0.0"
   },
   "repository": {
     "type": "git",
