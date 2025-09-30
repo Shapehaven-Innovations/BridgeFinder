@@ -11,7 +11,7 @@ export const CONFIG = {
     LIFI: {
       enabled: true,
       priority: 1,
-      requiresAuth: false,
+      requiresAuth: false, // Uses public API with optional key for higher limits
       adapter: "LiFiAdapter",
       rateLimit: { requests: 30, window: 60000 },
     },
@@ -25,7 +25,7 @@ export const CONFIG = {
     SOCKET: {
       enabled: true,
       priority: 3,
-      requiresAuth: false,
+      requiresAuth: false, // Public demo key available
       adapter: "SocketAdapter",
       rateLimit: { requests: 50, window: 60000 },
     },
@@ -39,7 +39,7 @@ export const CONFIG = {
     RANGO: {
       enabled: true,
       priority: 5,
-      requiresAuth: false,
+      requiresAuth: false, // Public demo key available
       adapter: "RangoAdapter",
       rateLimit: { requests: 60, window: 60000 },
     },
@@ -67,28 +67,28 @@ export const CONFIG = {
     ZEROX: {
       enabled: true,
       priority: 9,
-      requiresAuth: true,
+      requiresAuth: true, // Requires private API key
       adapter: "ZeroXAdapter",
       rateLimit: { requests: 100, window: 60000 },
     },
     ONEINCH: {
       enabled: true,
       priority: 10,
-      requiresAuth: true,
+      requiresAuth: true, // Requires private API key
       adapter: "OneInchAdapter",
       rateLimit: { requests: 30, window: 1000 },
     },
-    VIA: {
+    ACROSS: {
       enabled: true,
       priority: 11,
       requiresAuth: false,
-      adapter: "ViaAdapter",
+      adapter: "AcrossAdapter",
       rateLimit: { requests: 30, window: 60000 },
     },
     JUMPER: {
       enabled: true,
       priority: 12,
-      requiresAuth: false,
+      requiresAuth: false, // Uses LI.FI API
       adapter: "JumperAdapter",
       rateLimit: { requests: 30, window: 60000 },
     },

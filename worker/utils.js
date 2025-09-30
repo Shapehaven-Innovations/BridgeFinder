@@ -28,7 +28,7 @@ export function generateReferralUrl(bridge, env) {
   const urls = {
     lifi: `https://jumper.exchange/?ref=${referralId}`,
     stargate: `https://stargate.finance/?ref=${referralId}`,
-    socket: `https://socketbridge.com/?ref=${referralId}`, //bungee.exchange
+    socket: `https://socketbridge.com/?ref=${referralId}`,
     squid: `https://app.squidrouter.com/?ref=${referralId}`,
     rango: `https://rango.exchange/?ref=${referralId}`,
     xyfinance: `https://app.xy.finance/?ref=${referralId}`,
@@ -36,7 +36,7 @@ export function generateReferralUrl(bridge, env) {
     openocean: `https://openocean.finance/?ref=${referralId}`,
     "0x": `https://matcha.xyz/?ref=${referralId}`,
     "1inch": `https://app.1inch.io/?ref=${referralId}`,
-    viaprotocol: `https://via.exchange/?ref=${referralId}`,
+    across: `https://across.to/?ref=${referralId}`,
     jumper: `https://jumper.exchange/?ref=${referralId}`,
   };
 
