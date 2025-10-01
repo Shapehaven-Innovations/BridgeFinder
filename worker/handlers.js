@@ -10,8 +10,17 @@ import {
 
 export async function handleCompare(request, env, debug) {
   try {
-    const { fromChainId, toChainId, token, amount, fromAddress } =
+    const { fromChainId, toChainId, token, amount, fromAddress, slippage } =
       await request.json();
+
+    console.log("[Handler] Received request:", {
+      fromChainId,
+      toChainId,
+      token,
+      amount,
+      fromAddress,
+      slippage,
+    });
 
     // Validation
     if (!fromChainId || !toChainId || !token || !amount) {
@@ -21,7 +30,7 @@ export async function handleCompare(request, env, debug) {
           error:
             "Missing required parameters (fromChainId, toChainId, token, amount)",
         },
-        400,
+        400
       );
     }
 
@@ -31,7 +40,7 @@ export async function handleCompare(request, env, debug) {
           success: false,
           error: "Source and destination chains must be different",
         },
-        400,
+        400
       );
     }
 
@@ -45,7 +54,7 @@ export async function handleCompare(request, env, debug) {
           details:
             "Set QUOTE_FROM_ADDRESS secret or pass fromAddress in request body",
         },
-        400,
+        400
       );
     }
 
@@ -55,7 +64,10 @@ export async function handleCompare(request, env, debug) {
       token,
       amount,
       sender,
+      slippage: slippage || "0.01", // Add slippage parameter with default
     };
+
+    console.log("[Handler] Parameters being passed to adapters:", params);
 
     // Create adapter instances and group by priority
     const adapterGroups = [];
@@ -76,6 +88,9 @@ export async function handleCompare(request, env, debug) {
           adapter,
           config,
         });
+        console.log(
+          `[Handler] Created adapter: ${key} with priority ${priority}`
+        );
       } catch (error) {
         console.error(`Failed to create adapter ${key}:`, error.message);
       }
@@ -109,6 +124,11 @@ export async function handleCompare(request, env, debug) {
       delay += 500;
     }
 
+    console.log(
+      `[Handler] Calling ${providerCalls.length} adapters:`,
+      providerCalls.map((p) => p.name)
+    );
+
     // Execute all provider calls
     const results = await Promise.allSettled(
       providerCalls.map(async (call) => {
@@ -126,7 +146,7 @@ export async function handleCompare(request, env, debug) {
           }
           return null;
         }
-      }),
+      })
     );
 
     // Process results
@@ -136,7 +156,7 @@ export async function handleCompare(request, env, debug) {
           r.status === "fulfilled" &&
           r.value &&
           r.value.totalCost > 0 &&
-          !r.value.failed,
+          !r.value.failed
       )
       .map((r) => r.value)
       .sort((a, b) => a.totalCost - b.totalCost);
@@ -146,7 +166,7 @@ export async function handleCompare(request, env, debug) {
           .filter(
             (r) =>
               r.status === "rejected" ||
-              (r.status === "fulfilled" && r.value?.failed),
+              (r.status === "fulfilled" && r.value?.failed)
           )
           .map((r, i) => ({
             provider: providerCalls[i].name,
@@ -154,6 +174,10 @@ export async function handleCompare(request, env, debug) {
             error: r.status === "rejected" ? r.reason?.message : r.value?.error,
           }))
       : undefined;
+
+    console.log(
+      `[Handler] Results: ${bridges.length} bridges, ${failures?.length || 0} failures`
+    );
 
     if (bridges.length === 0) {
       return json({
@@ -203,7 +227,7 @@ export async function handleCompare(request, env, debug) {
         error: "Failed to compare bridges",
         details: error.message,
       },
-      500,
+      500
     );
   }
 }
@@ -235,7 +259,7 @@ export async function testAdapter(request, env) {
         success: false,
         error: error.message,
       },
-      500,
+      500
     );
   }
 }

@@ -95,7 +95,7 @@ export const CONFIG = {
   },
 
   // Default values for quotes
-  DEFAULT_SLIPPAGE: "1",
+  DEFAULT_SLIPPAGE: ".01", // 1% incase nothing is provided in frontend
   DEFAULT_GAS_ESTIMATE: 5,
 
   // Cache settings
