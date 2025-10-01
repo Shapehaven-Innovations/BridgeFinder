@@ -134,37 +134,45 @@ export async function handleCompare(request, env, debug) {
       providerCalls.map(async (call) => {
         try {
           const result = await call.fn();
-          // If adapter returns null, it means route is not available
+          // If adapter returns null, it means complete failure
           if (result === null) {
-            return null;
+            return {
+              provider: call.name,
+              failed: true,
+              error: "Provider returned no response",
+            };
           }
           return { ...result, _provider: call.name };
         } catch (error) {
           console.error(`${call.name} error:`, error.message);
-          if (debug) {
-            return {
-              error: error.message,
-              provider: call.name,
-              failed: true,
-            };
-          }
-          return null;
+          return {
+            error: error.message,
+            provider: call.name,
+            failed: true,
+          };
         }
       })
     );
 
-    // Process results - filter out null and failed responses
-    const bridges = results
-      .filter(
-        (r) =>
-          r.status === "fulfilled" &&
-          r.value !== null &&
-          r.value &&
-          r.value.totalCost > 0 &&
-          !r.value.failed
-      )
-      .map((r) => r.value)
-      .sort((a, b) => a.totalCost - b.totalCost);
+    // Separate available and unavailable bridges
+    const availableBridges = [];
+    const unavailableBridges = [];
+
+    results.forEach((r) => {
+      if (r.status === "fulfilled" && r.value && !r.value.failed) {
+        if (r.value.unavailable) {
+          unavailableBridges.push(r.value);
+        } else if (r.value.totalCost > 0) {
+          availableBridges.push(r.value);
+        }
+      }
+    });
+
+    // Sort available bridges by cost
+    availableBridges.sort((a, b) => a.totalCost - b.totalCost);
+
+    // Sort unavailable bridges alphabetically
+    unavailableBridges.sort((a, b) => a.name.localeCompare(b.name));
 
     const failures = debug
       ? results
