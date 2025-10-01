@@ -24,12 +24,12 @@ export class LiFiAdapter extends BridgeAdapter {
     }
 
     // Validate sender address
-    if (!sender || !/^0x[a-fA-F0-9]{40}$/.test(sender)) {
+    if (!sender || !/^0x[a-fA-F0-9]{40}$/i.test(sender)) {
       throw new Error(`LI.FI: Invalid sender address ${sender}`);
     }
 
     const tokenCfg = TOKENS[token];
-    if (!tokenCfg) throw new Error("LI.FI: unknown token");
+    if (!tokenCfg) throw new Error("LI.FI: Unknown token");
 
     const fromToken = this.getTokenAddress(token, fromChainId);
     const toToken = this.getTokenAddress(token, toChainId);
@@ -63,7 +63,7 @@ export class LiFiAdapter extends BridgeAdapter {
     try {
       res = await this.fetchWithTimeout(
         `https://li.quest/v1/quote?${queryParams}`,
-        { headers },
+        { headers }
       );
     } catch (error) {
       throw new Error(`LI.FI: Network error - ${error.message}`);
@@ -72,7 +72,7 @@ export class LiFiAdapter extends BridgeAdapter {
     if (!res.ok) {
       const errorBody = await res.text().catch(() => "No error details");
       throw new Error(
-        `LI.FI: HTTP ${res.status} - ${errorBody.substring(0, 200)}`,
+        `LI.FI: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
       );
     }
 
@@ -95,17 +95,33 @@ export class LiFiAdapter extends BridgeAdapter {
     const gasCostUSD = sumUSD(est.gasCosts);
     const networkFeeUSD = sumUSD(est.networkFees);
 
-    // Extract protocol/bridge fees (only non-included fees)
-    const feeCostUSD = (est.feeCosts || [])
-      .filter((f) => !f?.included)
-      .reduce((s, f) => {
-        const val = parseFloat(f?.amountUSD || "0");
-        return s + (isNaN(val) ? 0 : val);
-      }, 0);
+    // Extract protocol/bridge fees with detailed breakdown
+    let lifiFee = 0;
+    let crossChainFee = 0;
+    let otherFees = 0;
 
+    (est.feeCosts || []).forEach((fee) => {
+      if (fee.included) return; // Skip included fees
+
+      const amount = parseFloat(fee.amountUSD || "0");
+      if (isNaN(amount)) return;
+
+      if (fee.name === "LIFI Fixed Fee" || fee.name === "LiFi Fee") {
+        lifiFee += amount;
+      } else if (
+        fee.name === "CrossChain Fee" ||
+        fee.name === "Cross-Chain Fee"
+      ) {
+        crossChainFee += amount;
+      } else {
+        otherFees += amount;
+      }
+    });
+
+    const feeCostUSD = lifiFee + crossChainFee + otherFees;
     const totalCostUSD = gasCostUSD + networkFeeUSD + feeCostUSD;
 
-    // Round to 2 decimal places
+    // Round for display
     const roundUSD = (val) => Math.round(val * 100) / 100;
 
     return this.formatResponse({
@@ -121,13 +137,19 @@ export class LiFiAdapter extends BridgeAdapter {
       meta: {
         fromToken,
         toToken,
-        fromAmountUSD: parseFloat(est.fromAmountUSD || "0"),
-        toAmountUSD: parseFloat(est.toAmountUSD || "0"),
+        fromAmountUSD: roundUSD(parseFloat(est.fromAmountUSD || "0")),
+        toAmountUSD: roundUSD(parseFloat(est.toAmountUSD || "0")),
         fees: [
-          { name: "Gas", amount: roundUSD(gasCostUSD) },
-          { name: "Network", amount: roundUSD(networkFeeUSD) },
-          { name: "Protocol", amount: roundUSD(feeCostUSD) },
+          { name: "LiFi Fee", amount: roundUSD(lifiFee) },
+          { name: "Cross-Chain Fee", amount: roundUSD(crossChainFee) },
+          { name: "Other Protocol Fees", amount: roundUSD(otherFees) },
+          { name: "Gas Costs", amount: roundUSD(gasCostUSD) },
+          { name: "Network Fees", amount: roundUSD(networkFeeUSD) },
         ],
+        slippage: roundUSD(
+          parseFloat(est.fromAmountUSD || "0") -
+            parseFloat(est.toAmountUSD || "0")
+        ),
         tool: data.toolDetails?.key || data.toolDetails?.name,
       },
     });
