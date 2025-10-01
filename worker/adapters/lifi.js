@@ -95,14 +95,12 @@ export class LiFiAdapter extends BridgeAdapter {
     const gasCostUSD = sumUSD(est.gasCosts);
     const networkFeeUSD = sumUSD(est.networkFees);
 
-    // Extract protocol/bridge fees with detailed breakdown
+    // Extract ALL protocol/bridge fees (included and non-included)
     let lifiFee = 0;
     let crossChainFee = 0;
     let otherFees = 0;
 
     (est.feeCosts || []).forEach((fee) => {
-      if (fee.included) return; // Skip included fees
-
       const amount = parseFloat(fee.amountUSD || "0");
       if (isNaN(amount)) return;
 
