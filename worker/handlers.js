@@ -162,7 +162,7 @@ export async function handleCompare(request, env, debug) {
       if (r.status === "fulfilled" && r.value && !r.value.failed) {
         if (r.value.unavailable) {
           unavailableBridges.push(r.value);
-        } else if (r.value.totalCost > 0) {
+        } else if (r.value.totalCost != null && r.value.totalCost > 0) {
           availableBridges.push(r.value);
         }
       }
@@ -179,27 +179,26 @@ export async function handleCompare(request, env, debug) {
           .filter(
             (r) =>
               r.status === "rejected" ||
-              (r.status === "fulfilled" &&
-                (r.value?.failed || r.value === null))
+              (r.status === "fulfilled" && r.value?.failed)
           )
           .map((r, i) => ({
             provider: providerCalls[i].name,
             status: r.status,
-            error:
-              r.status === "rejected"
-                ? r.reason?.message
-                : r.value?.error || "Route not available",
+            error: r.status === "rejected" ? r.reason?.message : r.value?.error,
           }))
       : undefined;
 
     console.log(
-      `[Handler] Results: ${bridges.length} bridges, ${failures?.length || 0} failures`
+      `[Handler] Results: ${availableBridges.length} available, ${unavailableBridges.length} unavailable`
     );
 
-    if (bridges.length === 0) {
+    // Combine available and unavailable bridges
+    const allBridges = [...availableBridges, ...unavailableBridges];
+
+    if (allBridges.length === 0) {
       return json({
         success: false,
-        error: "No routes available for this pair",
+        error: "No providers responded",
         details: debug
           ? {
               providers: providerCalls.map((p) => p.name),
@@ -211,27 +210,50 @@ export async function handleCompare(request, env, debug) {
     }
 
     // Add metadata to bridges
-    const enrichedBridges = bridges.map((bridge, index) => ({
-      ...bridge,
-      position: index + 1,
-      isBest: index === 0,
-      savings:
-        index > 0
-          ? bridges[bridges.length - 1].totalCost - bridge.totalCost
-          : 0,
-      url: generateReferralUrl(bridge, env),
-    }));
+    const enrichedBridges = allBridges.map((bridge, index) => {
+      // Only calculate savings for available bridges
+      if (bridge.unavailable) {
+        return {
+          ...bridge,
+          position: null,
+          isBest: false,
+          savings: null,
+          url: null,
+        };
+      }
+
+      const availableIndex = availableBridges.indexOf(bridge);
+      return {
+        ...bridge,
+        position: availableIndex + 1,
+        isBest: availableIndex === 0,
+        savings:
+          availableIndex > 0
+            ? availableBridges[availableBridges.length - 1].totalCost -
+              bridge.totalCost
+            : 0,
+        url: generateReferralUrl(bridge, env),
+      };
+    });
 
     return json({
       success: true,
       bridges: enrichedBridges,
       summary: {
-        bestPrice: bridges[0].totalCost,
-        worstPrice: bridges[bridges.length - 1].totalCost,
+        bestPrice:
+          availableBridges.length > 0 ? availableBridges[0].totalCost : null,
+        worstPrice:
+          availableBridges.length > 0
+            ? availableBridges[availableBridges.length - 1].totalCost
+            : null,
         averagePrice:
-          bridges.reduce((sum, b) => sum + b.totalCost, 0) / bridges.length,
+          availableBridges.length > 0
+            ? availableBridges.reduce((sum, b) => sum + b.totalCost, 0) /
+              availableBridges.length
+            : null,
         providersQueried: providerCalls.length,
-        providersResponded: bridges.length,
+        providersResponded: availableBridges.length,
+        providersUnavailable: unavailableBridges.length,
         failures: debug ? failures : undefined,
       },
       timestamp: new Date().toISOString(),
