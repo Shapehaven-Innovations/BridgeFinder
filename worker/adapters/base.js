@@ -25,7 +25,7 @@ export class BridgeAdapter {
     if (this.requestCount >= this.config.rateLimit.requests) {
       const waitTime = this.config.rateLimit.window - windowElapsed;
       throw new Error(
-        `Rate limit exceeded. Wait ${Math.ceil(waitTime / 1000)}s`,
+        `Rate limit exceeded. Wait ${Math.ceil(waitTime / 1000)}s`
       );
     }
 
@@ -50,7 +50,6 @@ export class BridgeAdapter {
   getTokenAddress(token, chainId) {
     const tokenCfg = TOKENS[token];
     if (!tokenCfg) return null;
-
     if (typeof tokenCfg.address === "object") {
       return tokenCfg.address[chainId] || tokenCfg.address[1];
     }
@@ -92,6 +91,8 @@ export class BridgeAdapter {
       route: data.route || `${this.name} Route`,
       outputAmount: data.outputAmount || null,
       protocol: data.protocol || this.name,
+      isEstimated: data.isEstimated || false, // Add flag for fallback responses
+      meta: data.meta || undefined, // Include meta if provided
     };
   }
 }

@@ -134,6 +134,10 @@ export async function handleCompare(request, env, debug) {
       providerCalls.map(async (call) => {
         try {
           const result = await call.fn();
+          // If adapter returns null, it means route is not available
+          if (result === null) {
+            return null;
+          }
           return { ...result, _provider: call.name };
         } catch (error) {
           console.error(`${call.name} error:`, error.message);
@@ -149,11 +153,12 @@ export async function handleCompare(request, env, debug) {
       })
     );
 
-    // Process results
+    // Process results - filter out null and failed responses
     const bridges = results
       .filter(
         (r) =>
           r.status === "fulfilled" &&
+          r.value !== null &&
           r.value &&
           r.value.totalCost > 0 &&
           !r.value.failed
@@ -166,12 +171,16 @@ export async function handleCompare(request, env, debug) {
           .filter(
             (r) =>
               r.status === "rejected" ||
-              (r.status === "fulfilled" && r.value?.failed)
+              (r.status === "fulfilled" &&
+                (r.value?.failed || r.value === null))
           )
           .map((r, i) => ({
             provider: providerCalls[i].name,
             status: r.status,
-            error: r.status === "rejected" ? r.reason?.message : r.value?.error,
+            error:
+              r.status === "rejected"
+                ? r.reason?.message
+                : r.value?.error || "Route not available",
           }))
       : undefined;
 
