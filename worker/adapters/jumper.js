@@ -48,13 +48,13 @@ export class JumperAdapter extends BridgeAdapter {
     try {
       const res = await this.fetchWithTimeout(
         `https://li.quest/v1/quote?${queryParams}`,
-        { headers },
+        { headers }
       );
 
       if (!res.ok) {
         const errorText = await res.text().catch(() => "No error details");
         throw new Error(
-          `Jumper: HTTP ${res.status} - ${errorText.substring(0, 200)}`,
+          `Jumper: HTTP ${res.status} - ${errorText.substring(0, 200)}`
         );
       }
 
@@ -62,7 +62,7 @@ export class JumperAdapter extends BridgeAdapter {
 
       if (!data?.estimate) {
         throw new Error(
-          `Jumper: Invalid response structure - missing estimate`,
+          `Jumper: Invalid response structure - missing estimate`
         );
       }
 
@@ -75,7 +75,7 @@ export class JumperAdapter extends BridgeAdapter {
         bridgeFee: roundUSD(costs.bridgeFees),
         gasFee: roundUSD(costs.gasFees),
         estimatedTime: `${Math.ceil(
-          (data.estimate.executionDuration || 60) / 60,
+          (data.estimate.executionDuration || 60) / 60
         )} mins`,
         security: "Audited",
         liquidity: "High",
@@ -95,7 +95,7 @@ export class JumperAdapter extends BridgeAdapter {
           savings: {
             amount: roundUSD(costs.slippage),
             percentage: ((costs.slippage / costs.fromAmountUSD) * 100).toFixed(
-              2,
+              2
             ),
           },
           tool: data.toolDetails?.key || data.toolDetails?.name,
@@ -119,7 +119,7 @@ export class JumperAdapter extends BridgeAdapter {
   validateInputs(fromChainId, toChainId, token, amount, sender) {
     if (!fromChainId || !toChainId || fromChainId === toChainId) {
       throw new Error(
-        `Jumper: Invalid chain pair ${fromChainId}->${toChainId}`,
+        `Jumper: Invalid chain pair ${fromChainId}->${toChainId}`
       );
     }
 
