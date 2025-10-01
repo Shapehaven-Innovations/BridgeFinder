@@ -12,12 +12,31 @@ export class AcrossAdapter extends BridgeAdapter {
     await this.checkRateLimit();
 
     const { fromChainId, toChainId, token, amount, sender } = params;
+
+    // Validate chain IDs
+    if (!fromChainId || !toChainId || fromChainId === toChainId) {
+      throw new Error(
+        `Across: Invalid chain pair ${fromChainId}->${toChainId}`
+      );
+    }
+
+    // Validate amount
+    if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
+      throw new Error(`Across: Invalid amount ${amount}`);
+    }
+
+    // Validate sender address
+    if (!sender || !/^0x[a-fA-F0-9]{40}$/i.test(sender)) {
+      throw new Error(`Across: Invalid sender address ${sender}`);
+    }
+
     const tokenCfg = TOKENS[token];
-    if (!tokenCfg) throw new Error("Across: unknown token");
+    if (!tokenCfg) throw new Error("Across: Unknown token");
 
     const fromToken = this.getTokenAddress(token, fromChainId);
     const toToken = this.getTokenAddress(token, toChainId);
 
+    // Validate token addresses exist for chains
     if (!fromToken || fromToken === "undefined") {
       throw new Error(`Across: No ${token} address on chain ${fromChainId}`);
     }
@@ -36,61 +55,90 @@ export class AcrossAdapter extends BridgeAdapter {
       recipient: sender,
     });
 
+    let res;
     try {
-      const res = await this.fetchWithTimeout(
+      res = await this.fetchWithTimeout(
         `https://app.across.to/api/suggested-fees?${queryParams}`,
         {
           headers: {
             Accept: "application/json",
           },
-        },
+        }
       );
-
-      if (!res.ok) {
-        throw new Error(`Across: HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      if (!data.totalRelayFee) {
-        throw new Error("Across: No quote found");
-      }
-
-      const relayFeeUSD =
-        (parseFloat(data.totalRelayFee.pct) / 100) * parseFloat(amount);
-      const gasEstimate = 3;
-
-      return this.formatResponse({
-        totalCost: relayFeeUSD + gasEstimate,
-        bridgeFee: relayFeeUSD,
-        gasFee: gasEstimate,
-        estimatedTime: "2-4 mins",
-        security: "Optimistic Oracle",
-        liquidity: "High",
-        route: "Across Bridge",
-        outputAmount: data.expectedFillTime
-          ? String(BigInt(fromAmount) - BigInt(data.totalRelayFee.total || "0"))
-          : null,
-        protocol: "Across",
-        meta: {
-          fees: [
-            { name: "Relay Fee", amount: relayFeeUSD },
-            { name: "Gas (est)", amount: gasEstimate },
-          ],
-        },
-      });
     } catch (error) {
-      return this.formatResponse({
-        totalCost: 5,
-        bridgeFee: 2,
-        gasFee: 3,
-        estimatedTime: "2-4 mins",
-        security: "Optimistic Oracle",
-        liquidity: "High",
-        route: "Across Bridge",
-        protocol: "Across",
-        isEstimated: true,
-      });
+      throw new Error(`Across: Network error - ${error.message}`);
     }
+
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => "No error details");
+      throw new Error(
+        `Across: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
+      );
+    }
+
+    const data = await res.json();
+
+    if (!data?.totalRelayFee) {
+      throw new Error(
+        `Across: Invalid response structure - missing totalRelayFee`
+      );
+    }
+
+    // Calculate fees based on actual API response
+    const relayFeePct = parseFloat(data.totalRelayFee.pct || "0");
+    const relayFeeUSD = (relayFeePct / 100) * parseFloat(amount);
+
+    // Extract capital fee if present
+    const capitalFeePct = parseFloat(data.capitalFeePct || "0");
+    const capitalFeeUSD = (capitalFeePct / 100) * parseFloat(amount);
+
+    // Extract LP fee if present
+    const lpFeePct = parseFloat(data.lpFeePct || "0");
+    const lpFeeUSD = (lpFeePct / 100) * parseFloat(amount);
+
+    // Calculate gas costs from response if available
+    const gasCostUSD = parseFloat(data.estimatedGasCost?.usd || "0");
+
+    // Total bridge fees (relay + capital + LP)
+    const bridgeFeeUSD = relayFeeUSD + capitalFeeUSD + lpFeeUSD;
+    const totalCostUSD = bridgeFeeUSD + gasCostUSD;
+
+    // Round for display
+    const roundUSD = (val) => Math.round(val * 100) / 100;
+
+    // Calculate output amount
+    const outputAmount = data.totalRelayFee?.total
+      ? String(BigInt(fromAmount) - BigInt(data.totalRelayFee.total))
+      : null;
+
+    return this.formatResponse({
+      totalCost: roundUSD(totalCostUSD),
+      bridgeFee: roundUSD(bridgeFeeUSD),
+      gasFee: roundUSD(gasCostUSD),
+      estimatedTime: data.estimatedFillTimeSec
+        ? `${Math.ceil(data.estimatedFillTimeSec / 60)} mins`
+        : "2-4 mins",
+      security: "Optimistic Oracle",
+      liquidity: "High",
+      route: "Across Bridge",
+      outputAmount,
+      protocol: "Across",
+      meta: {
+        fromToken,
+        toToken,
+        fromAmountUSD: roundUSD(parseFloat(amount)),
+        toAmountUSD: roundUSD(parseFloat(amount) - bridgeFeeUSD),
+        fees: [
+          { name: "Relay Fee", amount: roundUSD(relayFeeUSD) },
+          { name: "Capital Fee", amount: roundUSD(capitalFeeUSD) },
+          { name: "LP Fee", amount: roundUSD(lpFeeUSD) },
+          { name: "Gas Costs", amount: roundUSD(gasCostUSD) },
+        ],
+        slippage: roundUSD(bridgeFeeUSD),
+        relayFeePct: roundUSD(relayFeePct),
+        capitalFeePct: roundUSD(capitalFeePct),
+        lpFeePct: roundUSD(lpFeePct),
+      },
+    });
   }
 }
