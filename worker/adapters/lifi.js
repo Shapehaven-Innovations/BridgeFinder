@@ -16,7 +16,7 @@ export class LiFiAdapter extends BridgeAdapter {
 
     await this.checkRateLimit();
 
-    const { fromChainId, toChainId, token, amount, sender } = params;
+    const { fromChainId, toChainId, token, amount, sender, slippage } = params;
 
     try {
       console.log("[LiFi] Validating inputs...");
@@ -44,6 +44,10 @@ export class LiFiAdapter extends BridgeAdapter {
       const fromAmount = this.toUnits(amount, tokenCfg.decimals);
       console.log("[LiFi] From amount in units:", fromAmount);
 
+      // Use slippage from params, fallback to 0.01 (1%)
+      const slippageValue = slippage || CONFIG.DEFAULT_SLIPPAGE || "0.01";
+      console.log("[LiFi] Using slippage:", slippageValue);
+
       const queryParams = new URLSearchParams({
         fromChain: String(fromChainId),
         toChain: String(toChainId),
@@ -51,7 +55,7 @@ export class LiFiAdapter extends BridgeAdapter {
         toToken,
         fromAmount,
         fromAddress: sender,
-        slippage: CONFIG.DEFAULT_SLIPPAGE || "0.01",
+        slippage: slippageValue,
         integrator: env?.INTEGRATOR_NAME || "BridgeAggregator",
         skipSimulation: "false",
       });

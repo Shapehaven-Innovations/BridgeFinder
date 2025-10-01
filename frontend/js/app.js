@@ -41,7 +41,21 @@ class BridgeApp {
     this.plugins = new Map();
     this.allResults = [];
     this.filteredResults = [];
+    this.settings = this.loadSettings();
     this.init();
+  }
+
+  loadSettings() {
+    const saved = localStorage.getItem("bridgeSettings");
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    return {
+      slippage: 1, // 1% as a number
+      priceThreshold: 10,
+      debugMode: false,
+      enabledProviders: [],
+    };
   }
 
   async init() {
@@ -50,10 +64,18 @@ class BridgeApp {
     this.loadPlugins();
     this.initTheme();
     this.loadProviders();
+    this.applySettings(); // Apply saved settings to UI
 
     Toast.init({
       container: document.getElementById("toasts"),
     });
+  }
+
+  applySettings() {
+    document.getElementById("slippage").value = this.settings.slippage;
+    document.getElementById("priceThreshold").value =
+      this.settings.priceThreshold;
+    document.getElementById("debugMode").checked = this.settings.debugMode;
   }
 
   render() {
@@ -79,7 +101,7 @@ class BridgeApp {
                 ${Object.entries(Config.chains)
                   .map(
                     ([id, chain]) =>
-                      `<option value="${id}">${chain.icon} ${chain.name}</option>`,
+                      `<option value="${id}">${chain.icon} ${chain.name}</option>`
                   )
                   .join("")}
               </select>
@@ -90,7 +112,7 @@ class BridgeApp {
                 ${Object.entries(Config.chains)
                   .map(
                     ([id, chain]) =>
-                      `<option value="${id}">${chain.icon} ${chain.name}</option>`,
+                      `<option value="${id}">${chain.icon} ${chain.name}</option>`
                   )
                   .join("")}
               </select>
@@ -170,6 +192,7 @@ class BridgeApp {
               <div class="setting-group">
                 <label>Slippage Tolerance (%)</label>
                 <input type="number" id="slippage" value="1" min="0.1" max="5" step="0.1">
+                <small class="setting-help">Current: <span id="slippageDisplay">1%</span> (0.01 decimal)</small>
               </div>
               <div class="setting-group">
                 <label>Price Alert Threshold ($)</label>
@@ -231,6 +254,16 @@ class BridgeApp {
       this.resetSettings();
     });
 
+    // Update slippage display when value changes
+    document.getElementById("slippage")?.addEventListener("input", (e) => {
+      const value = parseFloat(e.target.value);
+      const decimal = (value / 100).toFixed(4);
+      const display = document.getElementById("slippageDisplay");
+      if (display) {
+        display.textContent = `${value}% (${decimal} decimal)`;
+      }
+    });
+
     // Protocol filter events will be bound by ProtocolFilter component
   }
 
@@ -270,7 +303,7 @@ class BridgeApp {
           provider.status
         }</span>
       </label>
-    `,
+    `
       )
       .join("");
   }
@@ -281,11 +314,21 @@ class BridgeApp {
       toChain: document.getElementById("toChain").value,
       token: document.getElementById("token").value,
       amount: document.getElementById("amount").value,
+      slippage: (parseFloat(this.settings.slippage) / 100).toFixed(4), // Convert 1% to 0.01
     };
 
     if (formData.fromChain === formData.toChain) {
       Toast.show("Please select different chains", "error");
       return;
+    }
+
+    // Debug log
+    if (this.settings.debugMode) {
+      console.log("Search parameters:", formData);
+      console.log(
+        "Slippage:",
+        `${this.settings.slippage}% = ${formData.slippage} decimal`
+      );
     }
 
     this.setLoading(true);
@@ -356,14 +399,14 @@ class BridgeApp {
 
   filterResults() {
     const selectedProtocols = Array.from(
-      document.querySelectorAll(".protocol-chip input:checked"),
+      document.querySelectorAll(".protocol-chip input:checked")
     ).map((cb) => cb.value);
 
     if (selectedProtocols.length === 0) {
       this.filteredResults = [...this.allResults];
     } else {
       this.filteredResults = this.allResults.filter((b) =>
-        selectedProtocols.includes(b.protocol || b.name),
+        selectedProtocols.includes(b.protocol || b.name)
       );
     }
 
@@ -418,14 +461,14 @@ class BridgeApp {
     }
 
     document.getElementById("bestPrice").textContent = `$${formatNumber(
-      data.summary.bestPrice,
+      data.summary.bestPrice
     )}`;
     document.getElementById("avgPrice").textContent = `$${formatNumber(
-      data.summary.averagePrice,
+      data.summary.averagePrice
     )}`;
     document.getElementById("routeCount").textContent = data.bridges.length;
     document.getElementById("maxSavings").textContent = `$${formatNumber(
-      data.summary.worstPrice - data.summary.bestPrice,
+      data.summary.worstPrice - data.summary.bestPrice
     )}`;
 
     statsSection.classList.remove("hidden");
@@ -459,7 +502,7 @@ class BridgeApp {
           ...bridge,
           isBest: index === 0,
           position: index + 1,
-        }),
+        })
       )
       .join("");
 
@@ -519,6 +562,13 @@ class BridgeApp {
 
   openSettings() {
     document.getElementById("settingsModal").classList.remove("hidden");
+    // Update slippage display
+    const slippageValue = document.getElementById("slippage").value;
+    const decimal = (parseFloat(slippageValue) / 100).toFixed(4);
+    const display = document.getElementById("slippageDisplay");
+    if (display) {
+      display.textContent = `${slippageValue}% (${decimal} decimal)`;
+    }
   }
 
   closeSettings() {
@@ -526,22 +576,30 @@ class BridgeApp {
   }
 
   saveSettings() {
-    const settings = {
-      slippage: document.getElementById("slippage").value,
-      priceThreshold: document.getElementById("priceThreshold").value,
+    this.settings = {
+      slippage: parseFloat(document.getElementById("slippage").value),
+      priceThreshold: parseFloat(
+        document.getElementById("priceThreshold").value
+      ),
       debugMode: document.getElementById("debugMode").checked,
       enabledProviders: Array.from(
-        document.querySelectorAll("#providerList input:checked"),
+        document.querySelectorAll("#providerList input:checked")
       ).map((cb) => cb.value),
     };
 
-    localStorage.setItem("bridgeSettings", JSON.stringify(settings));
+    localStorage.setItem("bridgeSettings", JSON.stringify(this.settings));
     Toast.show("Settings saved", "success");
     this.closeSettings();
   }
 
   resetSettings() {
     localStorage.removeItem("bridgeSettings");
+    this.settings = {
+      slippage: 1,
+      priceThreshold: 10,
+      debugMode: false,
+      enabledProviders: [],
+    };
     document.getElementById("slippage").value = "1";
     document.getElementById("priceThreshold").value = "10";
     document.getElementById("debugMode").checked = false;

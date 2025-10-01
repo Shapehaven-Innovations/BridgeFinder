@@ -1,5 +1,4 @@
 // frontend/js/api.js - API Client for Bridge Aggregator
-
 export class ApiClient {
   constructor(baseUrl) {
     this.baseUrl =
@@ -19,25 +18,23 @@ export class ApiClient {
     }
 
     try {
-      console.log("Making API call to:", `${this.baseUrl}/api/compare`);
-      console.log("Request params:", {
+      const requestBody = {
         fromChainId: parseInt(params.fromChain),
         toChainId: parseInt(params.toChain),
         token: params.token,
         amount: parseFloat(params.amount),
-      });
+        slippage: params.slippage || "0.01", // Include slippage parameter
+      };
+
+      console.log("Making API call to:", `${this.baseUrl}/api/compare`);
+      console.log("Request params:", requestBody);
 
       const response = await fetch(`${this.baseUrl}/api/compare`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          fromChainId: parseInt(params.fromChain),
-          toChainId: parseInt(params.toChain),
-          token: params.token,
-          amount: parseFloat(params.amount),
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
