@@ -9,18 +9,34 @@ export class AcrossAdapter extends BridgeAdapter {
   }
 
   async getQuote(params, env) {
+    console.log(
+      "[Across] Starting getQuote with params:",
+      JSON.stringify(params)
+    );
+
     await this.checkRateLimit();
 
     const { fromChainId, toChainId, token, amount, sender } = params;
 
     try {
+      console.log("[Across] Validating inputs...");
       this.validateInputs(fromChainId, toChainId, token, amount, sender);
 
       const tokenCfg = TOKENS[token];
-      if (!tokenCfg) throw new Error("Across: Unknown token");
+      if (!tokenCfg) {
+        console.error("[Across] Unknown token:", token);
+        throw new Error("Across: Unknown token");
+      }
+      console.log("[Across] Token config:", tokenCfg);
 
       const fromToken = this.getTokenAddress(token, fromChainId);
       const toToken = this.getTokenAddress(token, toChainId);
+      console.log(
+        "[Across] Token addresses - from:",
+        fromToken,
+        "to:",
+        toToken
+      );
 
       // Validate token addresses exist for chains
       if (!fromToken || fromToken === "undefined") {
@@ -31,6 +47,7 @@ export class AcrossAdapter extends BridgeAdapter {
       }
 
       const fromAmount = this.toUnits(amount, tokenCfg.decimals);
+      console.log("[Across] From amount in units:", fromAmount);
 
       const queryParams = new URLSearchParams({
         originChainId: String(fromChainId),
@@ -41,31 +58,38 @@ export class AcrossAdapter extends BridgeAdapter {
         recipient: sender,
       });
 
-      const res = await this.fetchWithTimeout(
-        `https://app.across.to/api/suggested-fees?${queryParams}`,
-        {
-          headers: {
-            Accept: "application/json",
-          },
-        }
-      );
+      const url = `https://app.across.to/api/suggested-fees?${queryParams}`;
+      console.log("[Across] Fetching URL:", url);
+
+      const res = await this.fetchWithTimeout(url, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      console.log("[Across] Response status:", res.status, res.statusText);
 
       if (!res.ok) {
         const errorBody = await res.text().catch(() => "No error details");
+        console.error("[Across] HTTP Error:", res.status, errorBody);
         throw new Error(
           `Across: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
         );
       }
 
       const data = await res.json();
+      console.log("[Across] API Response:", JSON.stringify(data, null, 2));
 
       if (!data?.totalRelayFee) {
+        console.error("[Across] Invalid response structure:", data);
         throw new Error(
           `Across: Invalid response structure - missing totalRelayFee`
         );
       }
 
       const costs = this.calculateCosts(data, amount);
+      console.log("[Across] Calculated costs:", costs);
+
       const roundUSD = (val) => Math.round(val * 100) / 100;
 
       // Calculate output amount
@@ -73,7 +97,7 @@ export class AcrossAdapter extends BridgeAdapter {
         ? String(BigInt(fromAmount) - BigInt(data.totalRelayFee.total))
         : null;
 
-      return this.formatResponse({
+      const response = this.formatResponse({
         totalCost: roundUSD(costs.totalCost),
         bridgeFee: roundUSD(costs.bridgeFee),
         gasFee: roundUSD(costs.gasCost),
@@ -102,9 +126,19 @@ export class AcrossAdapter extends BridgeAdapter {
           lpFeePct: roundUSD(costs.lpFeePct),
         },
       });
+
+      console.log(
+        "[Across] Success! Returning response:",
+        JSON.stringify(response, null, 2)
+      );
+      return response;
     } catch (error) {
+      console.error("[Across] ERROR:", error.message);
+      console.error("[Across] Full error:", error);
+      console.error("[Across] Stack trace:", error.stack);
+
       // Fallback response on any error
-      return this.formatResponse({
+      const fallbackResponse = this.formatResponse({
         totalCost: 6.0,
         bridgeFee: 2.0,
         gasFee: 4.0,
@@ -115,6 +149,12 @@ export class AcrossAdapter extends BridgeAdapter {
         protocol: "Across",
         isEstimated: true,
       });
+
+      console.log(
+        "[Across] Returning fallback response:",
+        JSON.stringify(fallbackResponse, null, 2)
+      );
+      return fallbackResponse;
     }
   }
 
