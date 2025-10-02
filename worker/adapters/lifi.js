@@ -1,7 +1,12 @@
-// worker/adapters/lifi.js - REFACTORED TO THIN ADAPTER PATTERN
+// worker/adapters/lifi.js - FINAL OPTIMIZED (Based on Real API Response)
 import { BridgeAdapter } from "./base.js";
 import { CONFIG, TOKENS } from "../config.js";
 
+/**
+ * LiFi Adapter - Thin Implementation
+ * We only need to sum these arrays (minimal aggregation).
+ * This is acceptable for thin adapter since API doesn't provide totals.
+ */
 export class LiFiAdapter extends BridgeAdapter {
   constructor(config) {
     super("LI.FI", config);
@@ -9,10 +14,8 @@ export class LiFiAdapter extends BridgeAdapter {
   }
 
   async getQuote(params, env) {
-    // Rate limiting (infrastructure concern - OK in adapter)
     await this.checkRateLimit();
 
-    // Extract parameters (validation already done in handler)
     const { fromChainId, toChainId, token, amount, sender, slippage } = params;
 
     // Get token configuration
@@ -21,7 +24,7 @@ export class LiFiAdapter extends BridgeAdapter {
       throw new Error(`${this.name}: Unknown token ${token}`);
     }
 
-    // Resolve token addresses (utility - OK in adapter)
+    // Resolve token addresses
     const fromToken = this.getTokenAddress(token, fromChainId);
     const toToken = this.getTokenAddress(token, toChainId);
 
@@ -32,7 +35,7 @@ export class LiFiAdapter extends BridgeAdapter {
       throw new Error(`${this.name}: No ${token} on chain ${toChainId}`);
     }
 
-    // Convert amount to blockchain units (utility - OK in adapter)
+    // Convert amount to blockchain units
     const fromAmount = this.toUnits(amount, tokenCfg.decimals);
 
     // Build API request
@@ -72,74 +75,77 @@ export class LiFiAdapter extends BridgeAdapter {
       throw new Error(`${this.name}: Invalid response - missing estimate`);
     }
 
-    // Map to standard format (THIN - no calculations)
+    // Map to standard format
     return this.mapToStandardFormat(data);
   }
 
+  // Map LiFi API response to standard format
   mapToStandardFormat(apiResponse) {
     const { estimate, toolDetails } = apiResponse;
 
-    // Helper: safely parse and round USD values
+    // Helper to safely parse USD strings (only for display rounding)
     const parseUSD = (value) => {
       const num = parseFloat(value || "0");
       return isNaN(num) ? 0 : num;
     };
 
+    // Helper to round to 2 decimals for display
     const roundUSD = (value) => Math.round(parseUSD(value) * 100) / 100;
 
-    // Sum gas costs from API array (minimal aggregation - acceptable)
-    const totalGasCostUSD = (estimate.gasCosts || []).reduce(
-      (sum, gas) => sum + parseUSD(gas.amountUSD),
-      0
-    );
-
-    // Sum fee costs from API array (minimal aggregation - acceptable)
+    // Sum fee costs - API provides individual USD values
+    // Example: [0.0025, 0.0001, 0.0011] = 0.0037
     const totalFeeCostUSD = (estimate.feeCosts || []).reduce(
       (sum, fee) => sum + parseUSD(fee.amountUSD),
       0
     );
 
-    // Total cost
-    const totalCostUSD = totalGasCostUSD + totalFeeCostUSD;
+    // Sum gas costs - API provides individual USD values
+    // Example: [0.9242] = 0.9242
+    const totalGasCostUSD = (estimate.gasCosts || []).reduce(
+      (sum, gas) => sum + parseUSD(gas.amountUSD),
+      0
+    );
 
-    // Convert execution duration to minutes
+    // Total cost = fees + gas
+    const totalCostUSD = totalFeeCostUSD + totalGasCostUSD;
+
+    // Convert execution duration from seconds to minutes
     const executionMinutes = Math.ceil(
       (estimate.executionDuration || 300) / 60
     );
 
     // Return standard format
     return this.formatResponse({
-      // Financial data (from API)
+      // Financial data - using API's pre-calculated USD values
       totalCost: roundUSD(totalCostUSD),
       bridgeFee: roundUSD(totalFeeCostUSD),
       gasFee: roundUSD(totalGasCostUSD),
       outputAmount: estimate.toAmount,
 
-      // Metadata (from API)
+      // Metadata
       estimatedTime: `${executionMinutes} mins`,
       security: "Audited",
       liquidity: "High",
       route: toolDetails?.name || "Best Route",
       protocol: "LI.FI",
 
-      // Include full API response in meta for transparency/debugging
+      // Include detailed breakdown in meta for transparency
       meta: {
         tool: estimate.tool,
         approvalAddress: estimate.approvalAddress,
         toAmountMin: estimate.toAmountMin,
-        toAmount: estimate.toAmount,
         fromAmount: estimate.fromAmount,
         executionDuration: estimate.executionDuration,
-        fromAmountUSD: roundUSD(estimate.fromAmountUSD),
-        toAmountUSD: roundUSD(estimate.toAmountUSD),
+        fromAmountUSD: estimate.fromAmountUSD,
+        toAmountUSD: estimate.toAmountUSD,
         toolDetails: {
           key: toolDetails?.key,
           name: toolDetails?.name,
           logoURI: toolDetails?.logoURI,
         },
-        // Preserve breakdown for debugging
-        gasCosts: estimate.gasCosts,
+        // Preserve raw cost arrays for debugging
         feeCosts: estimate.feeCosts,
+        gasCosts: estimate.gasCosts,
       },
     });
   }
