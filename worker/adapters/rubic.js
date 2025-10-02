@@ -6,6 +6,7 @@ export class RubicAdapter extends BridgeAdapter {
   constructor(config) {
     super("Rubic", config);
     this.icon = "💎";
+    console.log("[Rubic] Adapter initialized");
   }
 
   async getQuote(params, env) {
@@ -33,7 +34,6 @@ export class RubicAdapter extends BridgeAdapter {
       const toToken = this.getTokenAddress(token, toChainId);
       console.log("[Rubic] Token addresses - from:", fromToken, "to:", toToken);
 
-      // Validate token addresses exist for chains
       if (!fromToken || fromToken === "undefined") {
         throw new Error(`Rubic: No ${token} address on chain ${fromChainId}`);
       }
@@ -80,6 +80,48 @@ export class RubicAdapter extends BridgeAdapter {
       if (!res.ok) {
         const errorBody = await res.text().catch(() => "No error details");
         console.error("[Rubic] HTTP Error:", res.status, errorBody);
+
+        // Check for API downtime - RETURN immediately, don't throw
+        if (res.status >= 500) {
+          console.log(
+            "[Rubic] API is experiencing issues - returning unavailable status"
+          );
+          return this.formatResponse({
+            totalCost: null,
+            bridgeFee: null,
+            gasFee: null,
+            estimatedTime: "N/A",
+            security: "Multi-Bridge",
+            liquidity: "Aggregated",
+            route: "API Unavailable",
+            protocol: "Rubic",
+            unavailable: true,
+            unavailableReason: "API experiencing issues",
+            unavailableDetails:
+              "Rubic's API is currently experiencing internal errors. Please try again in a few minutes.",
+          });
+        }
+
+        // Check for no routes found
+        if (res.status === 404 || errorBody.includes("No route")) {
+          console.log("[Rubic] No routes found for this pair");
+          return this.formatResponse({
+            totalCost: null,
+            bridgeFee: null,
+            gasFee: null,
+            estimatedTime: "N/A",
+            security: "Multi-Bridge",
+            liquidity: "Aggregated",
+            route: "No Route Found",
+            protocol: "Rubic",
+            unavailable: true,
+            unavailableReason: "No route available",
+            unavailableDetails:
+              "Rubic couldn't find a route for this token pair. Try different tokens or chains.",
+          });
+        }
+
+        // For other errors, throw to be caught by outer catch
         throw new Error(
           `Rubic: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
         );
@@ -132,39 +174,34 @@ export class RubicAdapter extends BridgeAdapter {
       console.error("[Rubic] Full error:", error);
       console.error("[Rubic] Stack trace:", error.stack);
 
-      // Fallback response on any error
-      const fallbackResponse = this.formatResponse({
-        totalCost: 9.0,
-        bridgeFee: 3.5,
-        gasFee: 5.5,
-        estimatedTime: "5-10 mins",
+      // Return unavailable status for any uncaught errors
+      console.log("[Rubic] Returning unavailable status");
+      return this.formatResponse({
+        totalCost: null,
+        bridgeFee: null,
+        gasFee: null,
+        estimatedTime: "N/A",
         security: "Multi-Bridge",
         liquidity: "Aggregated",
-        route: "Rubic Route",
+        route: "Temporarily Unavailable",
         protocol: "Rubic",
-        isEstimated: true,
+        unavailable: true,
+        unavailableReason: "Service error",
+        unavailableDetails:
+          "Rubic encountered an unexpected error. Please try again later.",
       });
-
-      console.log(
-        "[Rubic] Returning fallback response:",
-        JSON.stringify(fallbackResponse, null, 2)
-      );
-      return fallbackResponse;
     }
   }
 
   validateInputs(fromChainId, toChainId, token, amount, sender) {
-    // Validate chain IDs
     if (!fromChainId || !toChainId || fromChainId === toChainId) {
       throw new Error(`Rubic: Invalid chain pair ${fromChainId}->${toChainId}`);
     }
 
-    // Validate amount
     if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
       throw new Error(`Rubic: Invalid amount ${amount}`);
     }
 
-    // Validate sender address
     if (!sender || !/^0x[a-fA-F0-9]{40}$/i.test(sender)) {
       throw new Error(`Rubic: Invalid sender address ${sender}`);
     }
@@ -176,14 +213,10 @@ export class RubicAdapter extends BridgeAdapter {
       return isNaN(parsed) ? 0 : parsed;
     };
 
-    // Calculate price impact fee
     const priceImpactPct = parseUSD(trade.priceImpact);
     const priceImpact = (priceImpactPct / 100) * parseFloat(amount);
 
-    // Calculate gas costs
     const gasFee = parseUSD(trade.gasPrice || trade.gasCost?.usd);
-
-    // If no gas fee is provided, estimate based on chain
     const estimatedGas = gasFee > 0 ? gasFee : 5.0;
 
     const bridgeFee = priceImpact;

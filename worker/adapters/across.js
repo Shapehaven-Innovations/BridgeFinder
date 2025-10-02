@@ -19,26 +19,14 @@ export class AcrossAdapter extends BridgeAdapter {
     const { fromChainId, toChainId, token, amount, sender } = params;
 
     try {
-      console.log("[Across] Validating inputs...");
       this.validateInputs(fromChainId, toChainId, token, amount, sender);
 
       const tokenCfg = TOKENS[token];
-      if (!tokenCfg) {
-        console.error("[Across] Unknown token:", token);
-        throw new Error("Across: Unknown token");
-      }
-      console.log("[Across] Token config:", tokenCfg);
+      if (!tokenCfg) throw new Error("Across: Unknown token");
 
       const fromToken = this.getTokenAddress(token, fromChainId);
       const toToken = this.getTokenAddress(token, toChainId);
-      console.log(
-        "[Across] Token addresses - from:",
-        fromToken,
-        "to:",
-        toToken
-      );
 
-      // Validate token addresses exist for chains
       if (!fromToken || fromToken === "undefined") {
         throw new Error(`Across: No ${token} address on chain ${fromChainId}`);
       }
@@ -47,7 +35,6 @@ export class AcrossAdapter extends BridgeAdapter {
       }
 
       const fromAmount = this.toUnits(amount, tokenCfg.decimals);
-      console.log("[Across] From amount in units:", fromAmount);
 
       const queryParams = new URLSearchParams({
         originChainId: String(fromChainId),
@@ -72,6 +59,29 @@ export class AcrossAdapter extends BridgeAdapter {
       if (!res.ok) {
         const errorBody = await res.text().catch(() => "No error details");
         console.error("[Across] HTTP Error:", res.status, errorBody);
+
+        // Check for route not enabled - RETURN immediately, don't throw
+        if (res.status === 400 && errorBody.includes("ROUTE_NOT_ENABLED")) {
+          console.log(
+            "[Across] Route not supported for this chain pair/token combination"
+          );
+          return this.formatResponse({
+            totalCost: null,
+            bridgeFee: null,
+            gasFee: null,
+            estimatedTime: "N/A",
+            security: "Optimistic Oracle",
+            liquidity: "High",
+            route: "Not Available",
+            protocol: "Across",
+            unavailable: true,
+            unavailableReason: "Route not supported",
+            unavailableDetails:
+              "Across doesn't support this specific route. Try a different chain pair or token.",
+          });
+        }
+
+        // For other errors, throw to be caught by outer catch
         throw new Error(
           `Across: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
         );
@@ -92,7 +102,6 @@ export class AcrossAdapter extends BridgeAdapter {
 
       const roundUSD = (val) => Math.round(val * 100) / 100;
 
-      // Calculate output amount
       const outputAmount = data.totalRelayFee?.total
         ? String(BigInt(fromAmount) - BigInt(data.totalRelayFee.total))
         : null;
@@ -137,41 +146,36 @@ export class AcrossAdapter extends BridgeAdapter {
       console.error("[Across] Full error:", error);
       console.error("[Across] Stack trace:", error.stack);
 
-      // Fallback response on any error
-      const fallbackResponse = this.formatResponse({
-        totalCost: 6.0,
-        bridgeFee: 2.0,
-        gasFee: 4.0,
-        estimatedTime: "2-4 mins",
+      // Return unavailable status for any uncaught errors
+      console.log("[Across] Returning unavailable status");
+      return this.formatResponse({
+        totalCost: null,
+        bridgeFee: null,
+        gasFee: null,
+        estimatedTime: "N/A",
         security: "Optimistic Oracle",
         liquidity: "High",
-        route: "Across Bridge",
+        route: "Temporarily Unavailable",
         protocol: "Across",
-        isEstimated: true,
+        unavailable: true,
+        unavailableReason: "Service error",
+        unavailableDetails:
+          "Across bridge is experiencing issues. Please try again later or use an alternative bridge.",
       });
-
-      console.log(
-        "[Across] Returning fallback response:",
-        JSON.stringify(fallbackResponse, null, 2)
-      );
-      return fallbackResponse;
     }
   }
 
   validateInputs(fromChainId, toChainId, token, amount, sender) {
-    // Validate chain IDs
     if (!fromChainId || !toChainId || fromChainId === toChainId) {
       throw new Error(
         `Across: Invalid chain pair ${fromChainId}->${toChainId}`
       );
     }
 
-    // Validate amount
     if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
       throw new Error(`Across: Invalid amount ${amount}`);
     }
 
-    // Validate sender address
     if (!sender || !/^0x[a-fA-F0-9]{40}$/i.test(sender)) {
       throw new Error(`Across: Invalid sender address ${sender}`);
     }
@@ -183,22 +187,17 @@ export class AcrossAdapter extends BridgeAdapter {
       return isNaN(parsed) ? 0 : parsed;
     };
 
-    // Calculate fees based on actual API response
     const relayFeePct = parseUSD(data.totalRelayFee?.pct);
     const relayFee = (relayFeePct / 100) * parseFloat(amount);
 
-    // Extract capital fee if present
     const capitalFeePct = parseUSD(data.capitalFeePct);
     const capitalFee = (capitalFeePct / 100) * parseFloat(amount);
 
-    // Extract LP fee if present
     const lpFeePct = parseUSD(data.lpFeePct);
     const lpFee = (lpFeePct / 100) * parseFloat(amount);
 
-    // Calculate gas costs from response if available
     const gasCost = parseUSD(data.estimatedGasCost?.usd);
 
-    // Total bridge fees (relay + capital + LP)
     const bridgeFee = relayFee + capitalFee + lpFee;
     const totalCost = bridgeFee + gasCost;
 
