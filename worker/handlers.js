@@ -212,10 +212,10 @@ export async function handleCompare(request, env, debug) {
     });
 
     // Sort available bridges by cost
-    availableBridges.sort((a, b) => a.totalCost - b.totalCost);
+    enrichedAvailableBridges.sort((a, b) => a.totalCost - b.totalCost);
 
     // Sort unavailable bridges alphabetically
-    unavailableBridges.sort((a, b) => a.name.localeCompare(b.name));
+    enrichedUnavailableBridges.sort((a, b) => a.name.localeCompare(b.name));
 
     const failures = debug
       ? results
@@ -232,11 +232,14 @@ export async function handleCompare(request, env, debug) {
       : undefined;
 
     console.log(
-      `[Handler] Results: ${availableBridges.length} available, ${unavailableBridges.length} unavailable`
+      `[Handler] Results: ${enrichedAvailableBridges.length} available, ${enrichedUnavailableBridges.length} unavailable`
     );
 
     // Combine available and unavailable bridges
-    const allBridges = [...availableBridges, ...unavailableBridges];
+    const allBridges = [
+      ...enrichedAvailableBridges,
+      ...enrichedUnavailableBridges,
+    ];
 
     if (allBridges.length === 0) {
       return json({
@@ -265,15 +268,15 @@ export async function handleCompare(request, env, debug) {
         };
       }
 
-      const availableIndex = availableBridges.indexOf(bridge);
+      const availableIndex = enrichedAvailableBridges.indexOf(bridge);
       return {
         ...bridge,
         position: availableIndex + 1,
         isBest: availableIndex === 0,
         savings:
           availableIndex > 0
-            ? availableBridges[availableBridges.length - 1].totalCost -
-              bridge.totalCost
+            ? enrichedAvailableBridges[enrichedAvailableBridges.length - 1]
+                .totalCost - bridge.totalCost
             : 0,
         url: generateReferralUrl(bridge, env),
       };
@@ -284,19 +287,24 @@ export async function handleCompare(request, env, debug) {
       bridges: enrichedBridges,
       summary: {
         bestPrice:
-          availableBridges.length > 0 ? availableBridges[0].totalCost : null,
+          enrichedAvailableBridges.length > 0
+            ? enrichedAvailableBridges[0].totalCost
+            : null,
         worstPrice:
-          availableBridges.length > 0
-            ? availableBridges[availableBridges.length - 1].totalCost
+          enrichedAvailableBridges.length > 0
+            ? enrichedAvailableBridges[enrichedAvailableBridges.length - 1]
+                .totalCost
             : null,
         averagePrice:
-          availableBridges.length > 0
-            ? availableBridges.reduce((sum, b) => sum + b.totalCost, 0) /
-              availableBridges.length
+          enrichedAvailableBridges.length > 0
+            ? enrichedAvailableBridges.reduce(
+                (sum, b) => sum + b.totalCost,
+                0
+              ) / enrichedAvailableBridges.length
             : null,
         providersQueried: providerCalls.length,
-        providersResponded: availableBridges.length,
-        providersUnavailable: unavailableBridges.length,
+        providersResponded: enrichedAvailableBridges.length,
+        providersUnavailable: enrichedUnavailableBridges.length,
         failures: debug ? failures : undefined,
       },
       timestamp: new Date().toISOString(),
