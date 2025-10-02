@@ -194,3 +194,212 @@ export const TOKENS = {
     symbol: "WBTC",
   },
 };
+/**
+ * PROTOCOL_INFO - Bridge Protocol Security & Liquidity Metadata
+ *
+ * This configuration contains security and liquidity ratings for bridge protocols.
+ * This data is NOT from APIs - it's based on protocol research and documentation.
+ *
+ * Handler uses this to enrich adapter responses with business metadata.
+ * Keep this updated as protocols change or new ones are added.
+ */
+export const PROTOCOL_INFO = {
+  // Across Protocol
+  across: {
+    name: "Across",
+    security: "Optimistic Oracle",
+    liquidity: "High",
+    auditStatus: "Audited",
+    description: "Intent-based bridge with optimistic verification",
+  },
+
+  // Stargate Protocol
+  stargate: {
+    name: "Stargate",
+    security: "LayerZero",
+    liquidity: "Very High",
+    auditStatus: "Audited",
+    description: "Omnichain liquidity protocol powered by LayerZero",
+  },
+
+  // Hop Protocol
+  hop: {
+    name: "Hop Protocol",
+    security: "Optimistic Rollup",
+    liquidity: "Medium",
+    auditStatus: "Audited",
+    description: "Rollup-to-rollup general token bridge",
+  },
+
+  // Connext
+  connext: {
+    name: "Connext",
+    security: "Modular",
+    liquidity: "Medium",
+    auditStatus: "Audited",
+    description: "Modular interoperability protocol",
+  },
+
+  // Celer cBridge
+  cbridge: {
+    name: "Celer cBridge",
+    security: "PoS Validation",
+    liquidity: "High",
+    auditStatus: "Audited",
+    description: "Cross-chain liquidity network",
+  },
+
+  // Synapse Protocol
+  synapse: {
+    name: "Synapse",
+    security: "Multi-Party Computation",
+    liquidity: "High",
+    auditStatus: "Audited",
+    description: "Cross-chain liquidity protocol",
+  },
+
+  // Multichain
+  multichain: {
+    name: "Multichain",
+    security: "MPC Network",
+    liquidity: "High",
+    auditStatus: "Audited",
+    description: "Cross-chain router protocol",
+  },
+
+  // Wormhole
+  wormhole: {
+    name: "Wormhole",
+    security: "Guardian Network",
+    liquidity: "Medium",
+    auditStatus: "Audited",
+    description: "Generic message passing protocol",
+  },
+
+  // Axelar
+  axelar: {
+    name: "Axelar",
+    security: "Proof of Stake",
+    liquidity: "Medium",
+    auditStatus: "Audited",
+    description: "Universal interoperability network",
+  },
+
+  // Squid (uses Axelar)
+  squid: {
+    name: "Squid",
+    security: "Axelar GMP",
+    liquidity: "High",
+    auditStatus: "Audited",
+    description: "Cross-chain swap and liquidity routing",
+  },
+
+  // LiFi Fee Collection
+  feeCollection: {
+    name: "LiFi Fee",
+    security: "Smart Contract",
+    liquidity: "N/A",
+    auditStatus: "Audited",
+    description: "LiFi integrator fee collection mechanism",
+  },
+
+  // Socket
+  socket: {
+    name: "Socket",
+    security: "Multi-Bridge Aggregator",
+    liquidity: "Aggregated",
+    auditStatus: "Audited",
+    description: "Meta-aggregator for bridge protocols",
+  },
+
+  // Rango
+  rango: {
+    name: "Rango",
+    security: "Multi-Protocol",
+    liquidity: "Aggregated",
+    auditStatus: "Audited",
+    description: "Cross-chain DEX aggregator",
+  },
+
+  // XY Finance
+  xyfinance: {
+    name: "XY Finance",
+    security: "Y Pool",
+    liquidity: "High",
+    auditStatus: "Audited",
+    description: "Cross-chain swap aggregator",
+  },
+
+  // Rubic
+  rubic: {
+    name: "Rubic",
+    security: "Multi-Chain",
+    liquidity: "Aggregated",
+    auditStatus: "Audited",
+    description: "Cross-chain trading platform",
+  },
+
+  // OpenOcean
+  openocean: {
+    name: "OpenOcean",
+    security: "DEX Aggregator",
+    liquidity: "High",
+    auditStatus: "Audited",
+    description: "Full aggregation protocol",
+  },
+
+  // 0x Protocol
+  "0x": {
+    name: "0x Protocol",
+    security: "Audited",
+    liquidity: "High",
+    auditStatus: "Audited",
+    description: "Decentralized exchange infrastructure",
+  },
+
+  // 1inch
+  "1inch": {
+    name: "1inch",
+    security: "Audited",
+    liquidity: "Very High",
+    auditStatus: "Audited",
+    description: "DEX aggregator with Fusion+",
+  },
+
+  // Jumper
+  jumper: {
+    name: "Jumper",
+    security: "LI.FI",
+    liquidity: "High",
+    auditStatus: "Audited",
+    description: "LiFi-powered bridge interface",
+  },
+};
+
+/**
+ * Default metadata for unknown protocols
+ */
+export const DEFAULT_PROTOCOL_INFO = {
+  name: "Unknown",
+  security: "Unspecified",
+  liquidity: "Unknown",
+  auditStatus: "Unknown",
+  description: "Protocol information not available",
+};
+
+/**
+ * Get protocol metadata by tool key
+ *
+ * @param {string} toolKey - Protocol tool key (e.g., 'across', 'stargate')
+ * @returns {object} Protocol metadata
+ */
+export function getProtocolInfo(toolKey) {
+  if (!toolKey) {
+    return DEFAULT_PROTOCOL_INFO;
+  }
+
+  // Normalize key (lowercase)
+  const normalizedKey = String(toolKey).toLowerCase();
+
+  return PROTOCOL_INFO[normalizedKey] || DEFAULT_PROTOCOL_INFO;
+}

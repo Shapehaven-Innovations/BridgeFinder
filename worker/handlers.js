@@ -1,5 +1,5 @@
 // worker/handlers.js
-import { CONFIG, CHAINS, TOKENS } from "./config.js";
+import { CONFIG, CHAINS, TOKENS, getProtocolInfo } from "./config.js";
 import { AdapterFactory } from "./factory.js";
 import {
   json,
@@ -7,6 +7,39 @@ import {
   delayedCall,
   generateReferralUrl,
 } from "./utils.js";
+/**
+ * Enrich bridge response with protocol metadata
+ *
+ * This adds security and liquidity information from PROTOCOL_INFO configuration.
+ * This happens AFTER adapters return, keeping adapters thin.
+ *
+ * @param {object} bridge - Bridge response from adapter
+ * @returns {object} Enriched bridge response with protocol metadata
+ */
+function enrichBridgeWithProtocolMetadata(bridge) {
+  // Skip enrichment for unavailable bridges if they don't have meta
+  if (bridge.unavailable && !bridge.meta?.tool) {
+    return bridge;
+  }
+
+  // Get tool key from adapter's meta
+  // LiFi adapters pass tool key (e.g., "across", "stargate")
+  // Direct adapters use their protocol name
+  const toolKey =
+    bridge.meta?.tool || bridge.meta?.toolKey || bridge.protocol?.toLowerCase();
+
+  // Look up protocol info from configuration
+  const protocolInfo = getProtocolInfo(toolKey);
+
+  // Return enriched bridge response
+  return {
+    ...bridge,
+    // Add protocol metadata (from config, NOT from API)
+    security: protocolInfo.security,
+    liquidity: protocolInfo.liquidity,
+    auditStatus: protocolInfo.auditStatus,
+  };
+}
 
 export async function handleCompare(request, env, debug) {
   try {
@@ -30,7 +63,7 @@ export async function handleCompare(request, env, debug) {
           error:
             "Missing required parameters (fromChainId, toChainId, token, amount)",
         },
-        400,
+        400
       );
     }
 
@@ -40,7 +73,7 @@ export async function handleCompare(request, env, debug) {
           success: false,
           error: "Source and destination chains must be different",
         },
-        400,
+        400
       );
     }
 
@@ -54,7 +87,7 @@ export async function handleCompare(request, env, debug) {
           details:
             "Set QUOTE_FROM_ADDRESS secret or pass fromAddress in request body",
         },
-        400,
+        400
       );
     }
 
@@ -89,7 +122,7 @@ export async function handleCompare(request, env, debug) {
           config,
         });
         console.log(
-          `[Handler] Created adapter: ${key} with priority ${priority}`,
+          `[Handler] Created adapter: ${key} with priority ${priority}`
         );
       } catch (error) {
         console.error(`Failed to create adapter ${key}:`, error.message);
@@ -126,7 +159,7 @@ export async function handleCompare(request, env, debug) {
 
     console.log(
       `[Handler] Calling ${providerCalls.length} adapters:`,
-      providerCalls.map((p) => p.name),
+      providerCalls.map((p) => p.name)
     );
 
     // Execute all provider calls
@@ -151,7 +184,7 @@ export async function handleCompare(request, env, debug) {
             failed: true,
           };
         }
-      }),
+      })
     );
 
     // Separate available and unavailable bridges
@@ -167,6 +200,16 @@ export async function handleCompare(request, env, debug) {
         }
       }
     });
+    // Enrich bridges with protocol metadata
+    console.log("[Handler] Enriching bridges with protocol metadata...");
+
+    const enrichedAvailableBridges = availableBridges.map((bridge) => {
+      return enrichBridgeWithProtocolMetadata(bridge);
+    });
+
+    const enrichedUnavailableBridges = unavailableBridges.map((bridge) => {
+      return enrichBridgeWithProtocolMetadata(bridge);
+    });
 
     // Sort available bridges by cost
     availableBridges.sort((a, b) => a.totalCost - b.totalCost);
@@ -179,7 +222,7 @@ export async function handleCompare(request, env, debug) {
           .filter(
             (r) =>
               r.status === "rejected" ||
-              (r.status === "fulfilled" && r.value?.failed),
+              (r.status === "fulfilled" && r.value?.failed)
           )
           .map((r, i) => ({
             provider: providerCalls[i].name,
@@ -189,7 +232,7 @@ export async function handleCompare(request, env, debug) {
       : undefined;
 
     console.log(
-      `[Handler] Results: ${availableBridges.length} available, ${unavailableBridges.length} unavailable`,
+      `[Handler] Results: ${availableBridges.length} available, ${unavailableBridges.length} unavailable`
     );
 
     // Combine available and unavailable bridges
@@ -266,7 +309,7 @@ export async function handleCompare(request, env, debug) {
         error: "Failed to compare bridges",
         details: error.message,
       },
-      500,
+      500
     );
   }
 }
@@ -287,10 +330,13 @@ export async function testAdapter(request, env) {
     const adapter = AdapterFactory.createAdapter(config.adapter, config);
     const result = await adapter.getQuote(params, env);
 
+    // Enrich test adapter response too
+    const enrichedResult = enrichBridgeWithProtocolMetadata(result);
+
     return json({
       success: true,
       adapter: adapterName,
-      result,
+      result: enrichedResult,
     });
   } catch (error) {
     return json(
@@ -298,7 +344,7 @@ export async function testAdapter(request, env) {
         success: false,
         error: error.message,
       },
-      500,
+      500
     );
   }
 }

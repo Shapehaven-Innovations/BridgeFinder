@@ -1,12 +1,8 @@
-// worker/adapters/lifi.js - FINAL OPTIMIZED (Based on Real API Response)
+// worker/adapters/lifi.js - THIN ADAPTER (No hardcoded business data)
 import { BridgeAdapter } from "./base.js";
 import { CONFIG, TOKENS } from "../config.js";
 
-/**
- * LiFi Adapter - Thin Implementation
- * We only need to sum these arrays (minimal aggregation).
- * This is acceptable for thin adapter since API doesn't provide totals.
- */
+//LiFi Adapter - Thin Implementation
 
 export class LiFiAdapter extends BridgeAdapter {
   constructor(config) {
@@ -80,34 +76,36 @@ export class LiFiAdapter extends BridgeAdapter {
     return this.mapToStandardFormat(data);
   }
 
-  // Map LiFi API response to standard format
+  /**
+   * Map LiFi API response to standard format
+   *
+   * THIN ADAPTER: Only returns data from API
+   */
   mapToStandardFormat(apiResponse) {
     const { estimate, toolDetails } = apiResponse;
 
-    // Helper to safely parse USD strings (only for display rounding)
+    // Helper to safely parse USD strings
     const parseUSD = (value) => {
       const num = parseFloat(value || "0");
       return isNaN(num) ? 0 : num;
     };
 
-    // Helper to round to 2 decimals for display
+    // Helper to round to 2 decimals
     const roundUSD = (value) => Math.round(parseUSD(value) * 100) / 100;
 
-    // Sum fee costs - API provides individual USD values
-    // Example: [0.0025, 0.0001, 0.0011] = 0.0037
+    // Sum fee costs from API (minimal aggregation - acceptable)
     const totalFeeCostUSD = (estimate.feeCosts || []).reduce(
       (sum, fee) => sum + parseUSD(fee.amountUSD),
       0
     );
 
-    // Sum gas costs - API provides individual USD values
-    // Example: [0.9242] = 0.9242
+    // Sum gas costs from API (minimal aggregation - acceptable)
     const totalGasCostUSD = (estimate.gasCosts || []).reduce(
       (sum, gas) => sum + parseUSD(gas.amountUSD),
       0
     );
 
-    // Total cost = fees + gas
+    // Total cost
     const totalCostUSD = totalFeeCostUSD + totalGasCostUSD;
 
     // Convert execution duration from seconds to minutes
@@ -115,36 +113,38 @@ export class LiFiAdapter extends BridgeAdapter {
       (estimate.executionDuration || 300) / 60
     );
 
-    // Return standard format
+    // Return standard format - ONLY data from API
     return this.formatResponse({
-      // Financial data - using API's pre-calculated USD values
+      // Financial data (from API)
       totalCost: roundUSD(totalCostUSD),
       bridgeFee: roundUSD(totalFeeCostUSD),
       gasFee: roundUSD(totalGasCostUSD),
       outputAmount: estimate.toAmount,
 
-      // Metadata
+      // Timing (from API)
       estimatedTime: `${executionMinutes} mins`,
-      security: "Audited",
-      liquidity: "High",
+
+      // Route info (from API)
       route: toolDetails?.name || "Best Route",
       protocol: "LI.FI",
 
-      // Include detailed breakdown in meta for transparency
+      // API data for handler enrichment and debugging
       meta: {
-        tool: estimate.tool,
+        // Tool information for protocol lookup
+        tool: estimate.tool, // e.g., "across"
+        toolKey: toolDetails?.key, // e.g., "across"
+        toolName: toolDetails?.name, // e.g., "AcrossV4"
+        toolLogoURI: toolDetails?.logoURI,
+
+        // Amounts and timing
         approvalAddress: estimate.approvalAddress,
         toAmountMin: estimate.toAmountMin,
         fromAmount: estimate.fromAmount,
         executionDuration: estimate.executionDuration,
         fromAmountUSD: estimate.fromAmountUSD,
         toAmountUSD: estimate.toAmountUSD,
-        toolDetails: {
-          key: toolDetails?.key,
-          name: toolDetails?.name,
-          logoURI: toolDetails?.logoURI,
-        },
-        // Preserve raw cost arrays for debugging
+
+        // Raw cost arrays for debugging
         feeCosts: estimate.feeCosts,
         gasCosts: estimate.gasCosts,
       },
