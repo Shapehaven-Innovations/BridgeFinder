@@ -25,7 +25,7 @@ export class BridgeAdapter {
     if (this.requestCount >= this.config.rateLimit.requests) {
       const waitTime = this.config.rateLimit.window - windowElapsed;
       throw new Error(
-        `Rate limit exceeded. Wait ${Math.ceil(waitTime / 1000)}s`,
+        `Rate limit exceeded. Wait ${Math.ceil(waitTime / 1000)}s`
       );
     }
 
@@ -82,9 +82,9 @@ export class BridgeAdapter {
       name: this.name,
       icon: this.icon,
       provider: this.name.toLowerCase().replace(/\s+/g, ""),
-      totalCost: data.totalCost || CONFIG.DEFAULT_GAS_ESTIMATE,
+      totalCost: data.totalCost ?? CONFIG.DEFAULT_GAS_ESTIMATE,
       bridgeFee: data.bridgeFee || 0,
-      gasFee: data.gasFee || CONFIG.DEFAULT_GAS_ESTIMATE,
+      gasFee: data.gasFee ?? CONFIG.DEFAULT_GAS_ESTIMATE,
       estimatedTime: data.estimatedTime || "5-10 mins",
       security: data.security || "Verified",
       liquidity: data.liquidity || "Medium",
