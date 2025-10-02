@@ -11,7 +11,7 @@ export class AcrossAdapter extends BridgeAdapter {
   async getQuote(params, env) {
     console.log(
       "[Across] Starting getQuote with params:",
-      JSON.stringify(params)
+      JSON.stringify(params),
     );
 
     await this.checkRateLimit();
@@ -63,7 +63,7 @@ export class AcrossAdapter extends BridgeAdapter {
         // Check for route not enabled - RETURN immediately, don't throw
         if (res.status === 400 && errorBody.includes("ROUTE_NOT_ENABLED")) {
           console.log(
-            "[Across] Route not supported for this chain pair/token combination"
+            "[Across] Route not supported for this chain pair/token combination",
           );
           return this.formatResponse({
             totalCost: null,
@@ -83,7 +83,7 @@ export class AcrossAdapter extends BridgeAdapter {
 
         // For other errors, throw to be caught by outer catch
         throw new Error(
-          `Across: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
+          `Across: HTTP ${res.status} - ${errorBody.substring(0, 200)}`,
         );
       }
 
@@ -93,7 +93,7 @@ export class AcrossAdapter extends BridgeAdapter {
       if (!data?.totalRelayFee) {
         console.error("[Across] Invalid response structure:", data);
         throw new Error(
-          `Across: Invalid response structure - missing totalRelayFee`
+          `Across: Invalid response structure - missing totalRelayFee`,
         );
       }
 
@@ -138,7 +138,7 @@ export class AcrossAdapter extends BridgeAdapter {
 
       console.log(
         "[Across] Success! Returning response:",
-        JSON.stringify(response, null, 2)
+        JSON.stringify(response, null, 2),
       );
       return response;
     } catch (error) {
@@ -168,7 +168,7 @@ export class AcrossAdapter extends BridgeAdapter {
   validateInputs(fromChainId, toChainId, token, amount, sender) {
     if (!fromChainId || !toChainId || fromChainId === toChainId) {
       throw new Error(
-        `Across: Invalid chain pair ${fromChainId}->${toChainId}`
+        `Across: Invalid chain pair ${fromChainId}->${toChainId}`,
       );
     }
 

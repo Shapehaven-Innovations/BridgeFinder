@@ -25,7 +25,7 @@ export class BridgeAdapter {
     if (this.requestCount >= this.config.rateLimit.requests) {
       const waitTime = this.config.rateLimit.window - windowElapsed;
       throw new Error(
-        `Rate limit exceeded. Wait ${Math.ceil(waitTime / 1000)}s`
+        `Rate limit exceeded. Wait ${Math.ceil(waitTime / 1000)}s`,
       );
     }
 

@@ -30,7 +30,7 @@ export async function handleCompare(request, env, debug) {
           error:
             "Missing required parameters (fromChainId, toChainId, token, amount)",
         },
-        400
+        400,
       );
     }
 
@@ -40,7 +40,7 @@ export async function handleCompare(request, env, debug) {
           success: false,
           error: "Source and destination chains must be different",
         },
-        400
+        400,
       );
     }
 
@@ -54,7 +54,7 @@ export async function handleCompare(request, env, debug) {
           details:
             "Set QUOTE_FROM_ADDRESS secret or pass fromAddress in request body",
         },
-        400
+        400,
       );
     }
 
@@ -89,7 +89,7 @@ export async function handleCompare(request, env, debug) {
           config,
         });
         console.log(
-          `[Handler] Created adapter: ${key} with priority ${priority}`
+          `[Handler] Created adapter: ${key} with priority ${priority}`,
         );
       } catch (error) {
         console.error(`Failed to create adapter ${key}:`, error.message);
@@ -126,7 +126,7 @@ export async function handleCompare(request, env, debug) {
 
     console.log(
       `[Handler] Calling ${providerCalls.length} adapters:`,
-      providerCalls.map((p) => p.name)
+      providerCalls.map((p) => p.name),
     );
 
     // Execute all provider calls
@@ -151,7 +151,7 @@ export async function handleCompare(request, env, debug) {
             failed: true,
           };
         }
-      })
+      }),
     );
 
     // Separate available and unavailable bridges
@@ -179,7 +179,7 @@ export async function handleCompare(request, env, debug) {
           .filter(
             (r) =>
               r.status === "rejected" ||
-              (r.status === "fulfilled" && r.value?.failed)
+              (r.status === "fulfilled" && r.value?.failed),
           )
           .map((r, i) => ({
             provider: providerCalls[i].name,
@@ -189,7 +189,7 @@ export async function handleCompare(request, env, debug) {
       : undefined;
 
     console.log(
-      `[Handler] Results: ${availableBridges.length} available, ${unavailableBridges.length} unavailable`
+      `[Handler] Results: ${availableBridges.length} available, ${unavailableBridges.length} unavailable`,
     );
 
     // Combine available and unavailable bridges
@@ -266,7 +266,7 @@ export async function handleCompare(request, env, debug) {
         error: "Failed to compare bridges",
         details: error.message,
       },
-      500
+      500,
     );
   }
 }
@@ -298,7 +298,7 @@ export async function testAdapter(request, env) {
         success: false,
         error: error.message,
       },
-      500
+      500,
     );
   }
 }

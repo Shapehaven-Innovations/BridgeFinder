@@ -65,7 +65,8 @@ export class LiFiAdapter extends BridgeAdapter {
 
       const url = `https://li.quest/v1/quote?${queryParams}`;
       console.log("[LiFi] Fetching URL:", url);
-      console.log("[LiFi] Headers:", headers);
+      // ✅ OBJECTIVE 1: Remove API key from logs - only log header keys, not values
+      console.log("[LiFi] Request headers:", Object.keys(headers).join(", "));
 
       const res = await this.fetchWithTimeout(url, { headers });
 
@@ -87,37 +88,8 @@ export class LiFiAdapter extends BridgeAdapter {
         throw new Error(`LI.FI: Invalid response structure - missing estimate`);
       }
 
-      const costs = this.calculateCosts(data.estimate);
-      console.log("[LiFi] Calculated costs:", costs);
-
-      const roundUSD = (val) => Math.round(val * 100) / 100;
-
-      const response = this.formatResponse({
-        totalCost: roundUSD(costs.totalCost),
-        bridgeFee: roundUSD(costs.feeCost),
-        gasFee: roundUSD(costs.gasCost + costs.networkFee),
-        estimatedTime: `${Math.ceil((data.estimate.executionDuration || 300) / 60)} mins`,
-        security: "Audited",
-        liquidity: "High",
-        route: data.toolDetails?.name || "Best Route",
-        outputAmount: data.estimate.toAmount || null,
-        protocol: "LI.FI",
-        meta: {
-          fromToken,
-          toToken,
-          fromAmountUSD: roundUSD(costs.fromAmountUSD),
-          toAmountUSD: roundUSD(costs.toAmountUSD),
-          fees: [
-            { name: "LiFi Fee", amount: roundUSD(costs.lifiFee) },
-            { name: "Cross-Chain Fee", amount: roundUSD(costs.crossChainFee) },
-            { name: "Other Protocol Fees", amount: roundUSD(costs.otherFees) },
-            { name: "Gas Costs", amount: roundUSD(costs.gasCost) },
-            { name: "Network Fees", amount: roundUSD(costs.networkFee) },
-          ],
-          slippage: roundUSD(costs.slippage),
-          tool: data.toolDetails?.key || data.toolDetails?.name,
-        },
-      });
+      // ✅ OBJECTIVE 2: Use API response structure directly
+      const response = this.buildResponseFromAPI(data);
 
       console.log(
         "[LiFi] Success! Returning response:",
@@ -167,61 +139,110 @@ export class LiFiAdapter extends BridgeAdapter {
     }
   }
 
-  calculateCosts(estimate) {
+  /**
+   * ✅ OBJECTIVE 2: Build response using API's native structure
+   * Uses exact labels and calculations from LiFi API response
+   */
+  buildResponseFromAPI(data) {
+    const { estimate, toolDetails, action } = data;
+
+    // Parse values safely
     const parseUSD = (value) => {
       const parsed = parseFloat(value || "0");
       return isNaN(parsed) ? 0 : parsed;
     };
 
-    // Helper to sum USD values from array
-    const sumUSD = (arr) =>
-      (arr || []).reduce((s, x) => {
-        const val = parseUSD(x?.amountUSD);
-        return s + val;
-      }, 0);
+    const roundUSD = (val) => Math.round(val * 100) / 100;
 
-    // Calculate gas and network fees
-    const gasCost = sumUSD(estimate.gasCosts);
-    const networkFee = sumUSD(estimate.networkFees);
-
-    // Extract ALL protocol/bridge fees (included and non-included)
-    let lifiFee = 0;
-    let crossChainFee = 0;
-    let otherFees = 0;
-
-    (estimate.feeCosts || []).forEach((fee) => {
-      const amount = parseUSD(fee.amountUSD);
-
-      if (fee.name === "LIFI Fixed Fee" || fee.name === "LiFi Fee") {
-        lifiFee += amount;
-      } else if (
-        fee.name === "CrossChain Fee" ||
-        fee.name === "Cross-Chain Fee"
-      ) {
-        crossChainFee += amount;
-      } else {
-        otherFees += amount;
-      }
-    });
-
-    const feeCost = lifiFee + crossChainFee + otherFees;
-    const totalCost = gasCost + networkFee + feeCost;
-
+    // Use API's USD values directly
     const fromAmountUSD = parseUSD(estimate.fromAmountUSD);
     const toAmountUSD = parseUSD(estimate.toAmountUSD);
-    const slippage = Math.max(0, fromAmountUSD - toAmountUSD);
 
-    return {
-      gasCost,
-      networkFee,
-      lifiFee,
-      crossChainFee,
-      otherFees,
-      feeCost,
-      totalCost,
-      fromAmountUSD,
-      toAmountUSD,
-      slippage,
-    };
+    // Calculate total costs using API's structure
+    const gasCosts = (estimate.gasCosts || []).map((gas) => ({
+      type: gas.type,
+      amount: gas.amount,
+      amountUSD: parseUSD(gas.amountUSD),
+      token: gas.token?.symbol || "ETH",
+    }));
+
+    const feeCosts = (estimate.feeCosts || []).map((fee) => ({
+      name: fee.name,
+      description: fee.description,
+      amount: fee.amount,
+      amountUSD: parseUSD(fee.amountUSD),
+      percentage: fee.percentage,
+      included: fee.included,
+      token: fee.token?.symbol || "ETH",
+    }));
+
+    // Sum totals from API data
+    const totalGasCost = gasCosts.reduce((sum, gas) => sum + gas.amountUSD, 0);
+    const totalFeeCost = feeCosts.reduce((sum, fee) => sum + fee.amountUSD, 0);
+    const totalCost = totalGasCost + totalFeeCost;
+
+    // Calculate slippage from API amounts
+    const slippage = Math.max(0, fromAmountUSD - toAmountUSD - totalCost);
+
+    // Convert execution duration to readable format
+    const executionMinutes = Math.ceil(
+      (estimate.executionDuration || 300) / 60
+    );
+
+    return this.formatResponse({
+      totalCost: roundUSD(totalCost),
+      bridgeFee: roundUSD(totalFeeCost),
+      gasFee: roundUSD(totalGasCost),
+      estimatedTime: `${executionMinutes} mins`,
+      security: "Audited",
+      liquidity: "High",
+      route: toolDetails?.name || "Best Route",
+      outputAmount: estimate.toAmount || null,
+      protocol: "LI.FI",
+      meta: {
+        // Token information from API
+        fromToken: action?.fromToken?.address,
+        toToken: action?.toToken?.address,
+        fromTokenSymbol: action?.fromToken?.symbol,
+        toTokenSymbol: action?.toToken?.symbol,
+
+        // USD amounts from API
+        fromAmountUSD: roundUSD(fromAmountUSD),
+        toAmountUSD: roundUSD(toAmountUSD),
+
+        // Slippage info
+        slippage: roundUSD(slippage),
+        slippagePercentage: estimate.slippage || action?.slippage,
+
+        // Tool/bridge information
+        tool: toolDetails?.key,
+        toolName: toolDetails?.name,
+
+        // Detailed fee breakdown using API labels
+        gasCosts: gasCosts.map((gas) => ({
+          type: gas.type,
+          amountUSD: roundUSD(gas.amountUSD),
+          token: gas.token,
+        })),
+
+        feeCosts: feeCosts.map((fee) => ({
+          name: fee.name,
+          description: fee.description,
+          amountUSD: roundUSD(fee.amountUSD),
+          percentage: fee.percentage,
+          included: fee.included,
+          token: fee.token,
+        })),
+
+        // Min/max amounts from API
+        toAmountMin: estimate.toAmountMin,
+        toAmount: estimate.toAmount,
+        fromAmount: estimate.fromAmount,
+
+        // Execution info
+        executionDuration: estimate.executionDuration,
+        approvalAddress: estimate.approvalAddress,
+      },
+    });
   }
 }

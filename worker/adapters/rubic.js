@@ -12,7 +12,7 @@ export class RubicAdapter extends BridgeAdapter {
   async getQuote(params, env) {
     console.log(
       "[Rubic] Starting getQuote with params:",
-      JSON.stringify(params)
+      JSON.stringify(params),
     );
 
     await this.checkRateLimit();
@@ -50,7 +50,7 @@ export class RubicAdapter extends BridgeAdapter {
         "[Rubic] Chain mapping - from:",
         fromBlockchain,
         "to:",
-        toBlockchain
+        toBlockchain,
       );
 
       const body = {
@@ -72,7 +72,7 @@ export class RubicAdapter extends BridgeAdapter {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(body),
-        }
+        },
       );
 
       console.log("[Rubic] Response status:", res.status, res.statusText);
@@ -84,7 +84,7 @@ export class RubicAdapter extends BridgeAdapter {
         // Check for API downtime - RETURN immediately, don't throw
         if (res.status >= 500) {
           console.log(
-            "[Rubic] API is experiencing issues - returning unavailable status"
+            "[Rubic] API is experiencing issues - returning unavailable status",
           );
           return this.formatResponse({
             totalCost: null,
@@ -123,7 +123,7 @@ export class RubicAdapter extends BridgeAdapter {
 
         // For other errors, throw to be caught by outer catch
         throw new Error(
-          `Rubic: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
+          `Rubic: HTTP ${res.status} - ${errorBody.substring(0, 200)}`,
         );
       }
 
@@ -166,7 +166,7 @@ export class RubicAdapter extends BridgeAdapter {
 
       console.log(
         "[Rubic] Success! Returning response:",
-        JSON.stringify(response, null, 2)
+        JSON.stringify(response, null, 2),
       );
       return response;
     } catch (error) {

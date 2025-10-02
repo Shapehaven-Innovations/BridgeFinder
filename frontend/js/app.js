@@ -101,7 +101,7 @@ class BridgeApp {
                 ${Object.entries(Config.chains)
                   .map(
                     ([id, chain]) =>
-                      `<option value="${id}">${chain.icon} ${chain.name}</option>`
+                      `<option value="${id}">${chain.icon} ${chain.name}</option>`,
                   )
                   .join("")}
               </select>
@@ -112,7 +112,7 @@ class BridgeApp {
                 ${Object.entries(Config.chains)
                   .map(
                     ([id, chain]) =>
-                      `<option value="${id}">${chain.icon} ${chain.name}</option>`
+                      `<option value="${id}">${chain.icon} ${chain.name}</option>`,
                   )
                   .join("")}
               </select>
@@ -303,7 +303,7 @@ class BridgeApp {
           provider.status
         }</span>
       </label>
-    `
+    `,
       )
       .join("");
   }
@@ -327,7 +327,7 @@ class BridgeApp {
       console.log("Search parameters:", formData);
       console.log(
         "Slippage:",
-        `${this.settings.slippage}% = ${formData.slippage} decimal`
+        `${this.settings.slippage}% = ${formData.slippage} decimal`,
       );
     }
 
@@ -399,14 +399,14 @@ class BridgeApp {
 
   filterResults() {
     const selectedProtocols = Array.from(
-      document.querySelectorAll(".protocol-chip input:checked")
+      document.querySelectorAll(".protocol-chip input:checked"),
     ).map((cb) => cb.value);
 
     if (selectedProtocols.length === 0) {
       this.filteredResults = [...this.allResults];
     } else {
       this.filteredResults = this.allResults.filter((b) =>
-        selectedProtocols.includes(b.protocol || b.name)
+        selectedProtocols.includes(b.protocol || b.name),
       );
     }
 
@@ -461,14 +461,14 @@ class BridgeApp {
     }
 
     document.getElementById("bestPrice").textContent = `$${formatNumber(
-      data.summary.bestPrice
+      data.summary.bestPrice,
     )}`;
     document.getElementById("avgPrice").textContent = `$${formatNumber(
-      data.summary.averagePrice
+      data.summary.averagePrice,
     )}`;
     document.getElementById("routeCount").textContent = data.bridges.length;
     document.getElementById("maxSavings").textContent = `$${formatNumber(
-      data.summary.worstPrice - data.summary.bestPrice
+      data.summary.worstPrice - data.summary.bestPrice,
     )}`;
 
     statsSection.classList.remove("hidden");
@@ -502,7 +502,7 @@ class BridgeApp {
           ...bridge,
           isBest: index === 0,
           position: index + 1,
-        })
+        }),
       )
       .join("");
 
@@ -579,11 +579,11 @@ class BridgeApp {
     this.settings = {
       slippage: parseFloat(document.getElementById("slippage").value),
       priceThreshold: parseFloat(
-        document.getElementById("priceThreshold").value
+        document.getElementById("priceThreshold").value,
       ),
       debugMode: document.getElementById("debugMode").checked,
       enabledProviders: Array.from(
-        document.querySelectorAll("#providerList input:checked")
+        document.querySelectorAll("#providerList input:checked"),
       ).map((cb) => cb.value),
     };
 

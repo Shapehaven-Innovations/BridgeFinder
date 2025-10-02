@@ -117,7 +117,7 @@ export class BridgeCard {
                       <span>${fee.name}</span>
                       <span>${formatNumber(fee.amount)}</span>
                     </div>
-                  `
+                  `,
                     )
                     .join("")}
                 </div>
