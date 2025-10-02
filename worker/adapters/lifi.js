@@ -7,6 +7,7 @@ import { CONFIG, TOKENS } from "../config.js";
  * We only need to sum these arrays (minimal aggregation).
  * This is acceptable for thin adapter since API doesn't provide totals.
  */
+
 export class LiFiAdapter extends BridgeAdapter {
   constructor(config) {
     super("LI.FI", config);
