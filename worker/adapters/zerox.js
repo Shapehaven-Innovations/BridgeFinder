@@ -1,7 +1,4 @@
 // worker/adapters/zerox.js
-import { BridgeAdapter } from "./base.js";
-import { CONFIG, TOKENS } from "../config.js";
-
 export class ZeroXAdapter extends BridgeAdapter {
   constructor(config) {
     super("0x", config);
@@ -13,98 +10,110 @@ export class ZeroXAdapter extends BridgeAdapter {
 
     const { fromChainId, toChainId, token, amount, sender } = params;
 
+    // [DEV-LOG] Request parameters
+    console.log(`[${this.name}] API Request:`, {
+      fromChainId,
+      toChainId,
+      token,
+      amount,
+      sender,
+    }); // REMOVE-FOR-PRODUCTION
+
+    // 0x only works for same-chain swaps
     if (fromChainId !== toChainId) {
-      return this.formatResponse({
-        totalCost: 10,
-        bridgeFee: 4,
-        gasFee: 6,
-        estimatedTime: "5-10 mins",
-        security: "Audited",
-        liquidity: "High",
-        route: "0x Protocol",
-        protocol: "0x",
-        isEstimated: true,
-      });
+      throw new Error(
+        `${this.name}: Cross-chain not supported (chain ${fromChainId} -> ${toChainId})`
+      );
     }
 
     const tokenCfg = TOKENS[token];
-    if (!tokenCfg) throw new Error("0x: unknown token");
+    if (!tokenCfg) {
+      throw new Error(`${this.name}: Unknown token ${token}`);
+    }
 
     const buyToken = this.getTokenAddress(token, toChainId);
     const sellToken = this.getTokenAddress(token, fromChainId);
 
-    if (!buyToken || buyToken === "undefined") {
-      throw new Error(`0x: No ${token} address on chain ${toChainId}`);
-    }
-    if (!sellToken || sellToken === "undefined") {
-      throw new Error(`0x: No ${token} address on chain ${fromChainId}`);
+    if (!buyToken || !sellToken) {
+      throw new Error(`${this.name}: Missing token addresses`);
     }
 
     const sellAmount = this.toUnits(amount, tokenCfg.decimals);
 
+    if (!env?.ZEROX_API_KEY) {
+      throw new Error(`${this.name}: API key required (set ZEROX_API_KEY)`);
+    }
+
     const queryParams = new URLSearchParams({
-      buyToken,
       sellToken,
+      buyToken,
       sellAmount,
       takerAddress: sender,
-      slippagePercentage: CONFIG.DEFAULT_SLIPPAGE,
     });
 
-    try {
-      const headers = {
+    const url = `https://api.0x.org/swap/v1/quote?${queryParams}`;
+
+    // [DEV-LOG] API URL
+    console.log(`[${this.name}] Fetching:`, url); // REMOVE-FOR-PRODUCTION
+
+    const res = await this.fetchWithTimeout(url, {
+      headers: {
+        "0x-api-key": env.ZEROX_API_KEY,
         Accept: "application/json",
-      };
+      },
+    });
 
-      if (env?.ZEROX_API_KEY) {
-        headers["0x-api-key"] = env.ZEROX_API_KEY;
-      }
+    // [DEV-LOG] HTTP Response Status
+    console.log(`[${this.name}] HTTP Status:`, res.status); // REMOVE-FOR-PRODUCTION
 
-      const res = await this.fetchWithTimeout(
-        `https://api.0x.org/swap/v1/quote?${queryParams}`,
-        { headers },
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => "No details");
+      // [DEV-LOG] Error Response
+      console.error(`[${this.name}] API Error:`, errorBody); // REMOVE-FOR-PRODUCTION
+      throw new Error(
+        `${this.name}: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
       );
-
-      if (!res.ok) {
-        throw new Error(`0x: HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      const gasPrice = parseFloat(data.gasPrice || "0") / 1e9;
-      const gas = parseFloat(data.gas || "0");
-      const gasUSD = (gas * gasPrice * 2000) / 1e18;
-
-      const protocolFee = (parseFloat(data.protocolFee || "0") / 1e18) * 2000;
-
-      return this.formatResponse({
-        totalCost: gasUSD + protocolFee,
-        bridgeFee: protocolFee,
-        gasFee: gasUSD,
-        estimatedTime: "1-2 mins",
-        security: "Audited",
-        liquidity: "High",
-        route: "0x Protocol",
-        outputAmount: data.buyAmount,
-        protocol: "0x",
-        meta: {
-          fees: [
-            { name: "Protocol Fee", amount: protocolFee },
-            { name: "Gas", amount: gasUSD },
-          ],
-        },
-      });
-    } catch (error) {
-      return this.formatResponse({
-        totalCost: 6,
-        bridgeFee: 1,
-        gasFee: 5,
-        estimatedTime: "1-2 mins",
-        security: "Audited",
-        liquidity: "High",
-        route: "0x Protocol",
-        protocol: "0x",
-        isEstimated: true,
-      });
     }
+
+    const data = await res.json();
+
+    // [DEV-LOG] Full API Response
+    console.log(`[${this.name}] API Response:`, JSON.stringify(data, null, 2)); // REMOVE-FOR-PRODUCTION
+
+    if (!data || !data.price) {
+      throw new Error(`${this.name}: Invalid response - missing price data`);
+    }
+
+    return this.mapToStandardFormat(data);
+  }
+
+  mapToStandardFormat(apiResponse) {
+    const parseUSD = (value) => {
+      const num = parseFloat(value || "0");
+      return isNaN(num) ? 0 : num;
+    };
+
+    const gasUSD =
+      (parseUSD(apiResponse.estimatedGas) *
+        parseUSD(apiResponse.gasPrice) *
+        2000) /
+      1e18;
+    const protocolFee = parseUSD(apiResponse.protocolFee) / 1e6;
+
+    return this.formatResponse({
+      totalCost: gasUSD + protocolFee,
+      bridgeFee: protocolFee,
+      gasFee: gasUSD,
+      estimatedTime: "1-2 mins",
+      route: "0x Protocol",
+      protocol: "0x",
+      outputAmount: apiResponse.buyAmount,
+      meta: {
+        tool: "0x",
+        price: apiResponse.price,
+        estimatedGas: apiResponse.estimatedGas,
+        sources: apiResponse.sources,
+      },
+    });
   }
 }

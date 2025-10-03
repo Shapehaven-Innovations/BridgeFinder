@@ -1,7 +1,4 @@
 // worker/adapters/openocean.js
-import { BridgeAdapter } from "./base.js";
-import { CONFIG, TOKENS } from "../config.js";
-
 export class OpenOceanAdapter extends BridgeAdapter {
   constructor(config) {
     super("OpenOcean", config);
@@ -12,20 +9,30 @@ export class OpenOceanAdapter extends BridgeAdapter {
     await this.checkRateLimit();
 
     const { fromChainId, toChainId, token, amount, sender } = params;
+
+    // [DEV-LOG] Request parameters
+    console.log(`[${this.name}] API Request:`, {
+      fromChainId,
+      toChainId,
+      token,
+      amount,
+      sender,
+    }); // REMOVE-FOR-PRODUCTION
+
     const tokenCfg = TOKENS[token];
-    if (!tokenCfg) throw new Error("OpenOcean: unknown token");
+    if (!tokenCfg) {
+      throw new Error(`${this.name}: Unknown token ${token}`);
+    }
 
     const fromToken = this.getTokenAddress(token, fromChainId);
     const toToken = this.getTokenAddress(token, toChainId);
 
-    if (!fromToken || fromToken === "undefined") {
-      throw new Error(`OpenOcean: No ${token} address on chain ${fromChainId}`);
-    }
-    if (!toToken || toToken === "undefined") {
-      throw new Error(`OpenOcean: No ${token} address on chain ${toChainId}`);
+    if (!fromToken || !toToken) {
+      throw new Error(`${this.name}: Missing token addresses`);
     }
 
     const fromAmount = this.toUnits(amount, tokenCfg.decimals);
+    const chain = this.mapChainToOpenOcean(fromChainId);
 
     const queryParams = new URLSearchParams({
       inTokenAddress: fromToken,
@@ -36,65 +43,67 @@ export class OpenOceanAdapter extends BridgeAdapter {
       gasPrice: "5",
     });
 
-    try {
-      const chain = this.mapChainToOpenOcean(fromChainId);
-      const res = await this.fetchWithTimeout(
-        `https://open-api.openocean.finance/v3/${chain}/quote?${queryParams}`,
-        {
-          headers: {
-            Accept: "application/json",
-          },
-        },
+    const url = `https://open-api.openocean.finance/v3/${chain}/quote?${queryParams}`;
+
+    // [DEV-LOG] API URL
+    console.log(`[${this.name}] Fetching:`, url); // REMOVE-FOR-PRODUCTION
+
+    const res = await this.fetchWithTimeout(url, {
+      headers: { Accept: "application/json" },
+    });
+
+    // [DEV-LOG] HTTP Response Status
+    console.log(`[${this.name}] HTTP Status:`, res.status); // REMOVE-FOR-PRODUCTION
+
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => "No details");
+      // [DEV-LOG] Error Response
+      console.error(`[${this.name}] API Error:`, errorBody); // REMOVE-FOR-PRODUCTION
+      throw new Error(
+        `${this.name}: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
       );
-
-      if (!res.ok) {
-        throw new Error(`OpenOcean: HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      if (!data.data) {
-        throw new Error("OpenOcean: No quote found");
-      }
-
-      const quote = data.data;
-      const estimatedGas = parseFloat(quote.estimatedGas || "0");
-      const gasPrice = parseFloat(quote.gasPrice || "5") / 1e9;
-      const gasUSD = (estimatedGas * gasPrice * 2000) / 1e18;
-
-      const priceImpact = parseFloat(quote.priceImpact || "0");
-      const feeUSD = Math.abs(priceImpact) * parseFloat(amount);
-
-      return this.formatResponse({
-        totalCost: gasUSD + feeUSD,
-        bridgeFee: feeUSD,
-        gasFee: gasUSD,
-        estimatedTime: "1-2 mins",
-        security: "DEX Aggregator",
-        liquidity: "High",
-        route: "OpenOcean",
-        outputAmount: quote.outAmount,
-        protocol: "OpenOcean",
-        meta: {
-          fees: [
-            { name: "Price Impact", amount: feeUSD },
-            { name: "Gas", amount: gasUSD },
-          ],
-        },
-      });
-    } catch (error) {
-      return this.formatResponse({
-        totalCost: 7,
-        bridgeFee: 2,
-        gasFee: 5,
-        estimatedTime: "1-2 mins",
-        security: "DEX Aggregator",
-        liquidity: "High",
-        route: "OpenOcean",
-        protocol: "OpenOcean",
-        isEstimated: true,
-      });
     }
+
+    const data = await res.json();
+
+    // [DEV-LOG] Full API Response
+    console.log(`[${this.name}] API Response:`, JSON.stringify(data, null, 2)); // REMOVE-FOR-PRODUCTION
+
+    if (!data?.data) {
+      throw new Error(`${this.name}: Invalid response - missing data`);
+    }
+
+    return this.mapToStandardFormat(data.data);
+  }
+
+  mapToStandardFormat(apiResponse) {
+    const parseFloat2 = (value) => {
+      const num = parseFloat(value || "0");
+      return isNaN(num) ? 0 : num;
+    };
+
+    const estimatedGas = parseFloat2(apiResponse.estimatedGas);
+    const gasPrice = parseFloat2(apiResponse.gasPrice) / 1e9;
+    const gasUSD = (estimatedGas * gasPrice * 2000) / 1e18;
+    const priceImpact = parseFloat2(apiResponse.priceImpact);
+    const feeUSD =
+      (Math.abs(priceImpact) * parseFloat2(apiResponse.inAmount)) /
+      Math.pow(10, 6);
+
+    return this.formatResponse({
+      totalCost: gasUSD + feeUSD,
+      bridgeFee: feeUSD,
+      gasFee: gasUSD,
+      estimatedTime: "1-2 mins",
+      route: "OpenOcean",
+      protocol: "OpenOcean",
+      outputAmount: apiResponse.outAmount,
+      meta: {
+        tool: "openocean",
+        priceImpact: apiResponse.priceImpact,
+        estimatedGas: apiResponse.estimatedGas,
+      },
+    });
   }
 
   mapChainToOpenOcean(chainId) {
@@ -108,6 +117,10 @@ export class OpenOceanAdapter extends BridgeAdapter {
       8453: "base",
       250: "fantom",
     };
-    return map[chainId] || "eth";
+    const result = map[chainId];
+    if (!result) {
+      throw new Error(`OpenOcean: Unsupported chain ${chainId}`);
+    }
+    return result;
   }
 }

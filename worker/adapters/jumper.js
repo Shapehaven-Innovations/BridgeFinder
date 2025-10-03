@@ -1,31 +1,34 @@
 // worker/adapters/jumper.js
-import { BridgeAdapter } from "./base.js";
-import { CONFIG, TOKENS } from "../config.js";
-
 export class JumperAdapter extends BridgeAdapter {
   constructor(config) {
     super("Jumper", config);
-    this.icon = "🐸";
+    this.icon = "🦘";
   }
 
   async getQuote(params, env) {
     await this.checkRateLimit();
 
-    const { fromChainId, toChainId, token, amount, sender } = params;
+    const { fromChainId, toChainId, token, amount, sender, slippage } = params;
 
-    this.validateInputs(fromChainId, toChainId, token, amount, sender);
+    // [DEV-LOG] Request parameters
+    console.log(`[${this.name}] API Request:`, {
+      fromChainId,
+      toChainId,
+      token,
+      amount,
+      sender,
+    }); // REMOVE-FOR-PRODUCTION
 
     const tokenCfg = TOKENS[token];
-    if (!tokenCfg) throw new Error("Jumper: Unknown token");
+    if (!tokenCfg) {
+      throw new Error(`${this.name}: Unknown token ${token}`);
+    }
 
     const fromToken = this.getTokenAddress(token, fromChainId);
     const toToken = this.getTokenAddress(token, toChainId);
 
-    if (!fromToken || fromToken === "undefined") {
-      throw new Error(`Jumper: No ${token} address on chain ${fromChainId}`);
-    }
-    if (!toToken || toToken === "undefined") {
-      throw new Error(`Jumper: No ${token} address on chain ${toChainId}`);
+    if (!fromToken || !toToken) {
+      throw new Error(`${this.name}: Missing token addresses`);
     }
 
     const fromAmount = this.toUnits(amount, tokenCfg.decimals);
@@ -37,147 +40,94 @@ export class JumperAdapter extends BridgeAdapter {
       toToken,
       fromAmount,
       fromAddress: sender,
-      slippage: CONFIG.DEFAULT_SLIPPAGE || "0.01",
-      integrator: "jumper",
+      slippage: slippage || CONFIG.DEFAULT_SLIPPAGE || "0.01",
+      integrator: env?.INTEGRATOR_NAME || "BridgeAggregator",
       skipSimulation: "false",
     });
 
     const headers = { Accept: "application/json" };
-    if (env?.LIFI_API_KEY) headers["x-lifi-api-key"] = env.LIFI_API_KEY;
-
-    try {
-      const res = await this.fetchWithTimeout(
-        `https://li.quest/v1/quote?${queryParams}`,
-        { headers },
-      );
-
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => "No error details");
-        throw new Error(
-          `Jumper: HTTP ${res.status} - ${errorText.substring(0, 200)}`,
-        );
-      }
-
-      const data = await res.json();
-
-      if (!data?.estimate) {
-        throw new Error(
-          `Jumper: Invalid response structure - missing estimate`,
-        );
-      }
-
-      const costs = this.calculateCosts(data.estimate, env);
-
-      const roundUSD = (val) => Math.round(val * 100) / 100;
-
-      return this.formatResponse({
-        totalCost: roundUSD(costs.totalCost),
-        bridgeFee: roundUSD(costs.bridgeFees),
-        gasFee: roundUSD(costs.gasFees),
-        estimatedTime: `${Math.ceil(
-          (data.estimate.executionDuration || 60) / 60,
-        )} mins`,
-        security: "Audited",
-        liquidity: "High",
-        route: data.toolDetails?.name || "Best Route",
-        outputAmount: data.estimate.toAmount || null,
-        protocol: "LI.FI/Jumper",
-        meta: {
-          fromToken,
-          toToken,
-          fromAmountUSD: roundUSD(costs.fromAmountUSD),
-          toAmountUSD: roundUSD(costs.toAmountUSD),
-          fees: [
-            { name: "Protocol Fee", amount: roundUSD(costs.lifiFee) },
-            { name: "CrossChain Fee", amount: roundUSD(costs.crossChainFee) },
-            { name: "Gas", amount: roundUSD(costs.gasFees) },
-          ],
-          savings: {
-            amount: roundUSD(costs.slippage),
-            percentage: ((costs.slippage / costs.fromAmountUSD) * 100).toFixed(
-              2,
-            ),
-          },
-          tool: data.toolDetails?.key || data.toolDetails?.name,
-        },
-      });
-    } catch (error) {
-      return this.formatResponse({
-        totalCost: 7.5,
-        bridgeFee: 2.5,
-        gasFee: 5,
-        estimatedTime: "3-5 mins",
-        security: "Audited",
-        liquidity: "High",
-        route: "Jumper Route",
-        protocol: "LI.FI/Jumper",
-        isEstimated: true,
-      });
+    if (env?.LIFI_API_KEY) {
+      headers["x-lifi-api-key"] = env.LIFI_API_KEY;
     }
-  }
 
-  validateInputs(fromChainId, toChainId, token, amount, sender) {
-    if (!fromChainId || !toChainId || fromChainId === toChainId) {
+    const url = `https://li.quest/v1/quote?${queryParams}`;
+
+    // [DEV-LOG] API URL
+    console.log(`[${this.name}] Fetching:`, url); // REMOVE-FOR-PRODUCTION
+
+    const res = await this.fetchWithTimeout(url, { headers });
+
+    // [DEV-LOG] HTTP Response Status
+    console.log(`[${this.name}] HTTP Status:`, res.status); // REMOVE-FOR-PRODUCTION
+
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => "No details");
+      // [DEV-LOG] Error Response
+      console.error(`[${this.name}] API Error:`, errorBody); // REMOVE-FOR-PRODUCTION
       throw new Error(
-        `Jumper: Invalid chain pair ${fromChainId}->${toChainId}`,
+        `${this.name}: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
       );
     }
 
-    if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
-      throw new Error(`Jumper: Invalid amount ${amount}`);
+    const data = await res.json();
+
+    // [DEV-LOG] Full API Response
+    console.log(`[${this.name}] API Response:`, JSON.stringify(data, null, 2)); // REMOVE-FOR-PRODUCTION
+
+    if (!data?.estimate) {
+      throw new Error(`${this.name}: Invalid response - missing estimate`);
     }
 
-    if (!sender || !/^0x[a-fA-F0-9]{40}$/i.test(sender)) {
-      throw new Error(`Jumper: Invalid sender address ${sender}`);
-    }
+    return this.mapToStandardFormat(data);
   }
 
-  calculateCosts(estimate, env) {
+  mapToStandardFormat(apiResponse) {
+    const { estimate, toolDetails } = apiResponse;
+
     const parseUSD = (value) => {
-      const parsed = parseFloat(value || "0");
-      return isNaN(parsed) ? 0 : parsed;
+      const num = parseFloat(value || "0");
+      return isNaN(num) ? 0 : num;
     };
 
-    const sumUSD = (arr) =>
-      (arr || []).reduce((sum, item) => {
-        return sum + parseUSD(item?.amountUSD);
-      }, 0);
+    const roundUSD = (value) => Math.round(parseUSD(value) * 100) / 100;
 
-    const gasFees =
-      sumUSD(estimate.gasCosts) + sumUSD(estimate.networkFees || []);
+    const totalFeeCostUSD = (estimate.feeCosts || []).reduce(
+      (sum, fee) => sum + parseUSD(fee.amountUSD),
+      0
+    );
 
-    let lifiFee = 0;
-    let crossChainFee = 0;
-    let otherFees = 0;
+    const totalGasCostUSD = (estimate.gasCosts || []).reduce(
+      (sum, gas) => sum + parseUSD(gas.amountUSD),
+      0
+    );
 
-    (estimate.feeCosts || []).forEach((fee) => {
-      const amount = parseUSD(fee.amountUSD);
+    const totalCostUSD = totalFeeCostUSD + totalGasCostUSD;
+    const executionMinutes = Math.ceil(
+      (estimate.executionDuration || 300) / 60
+    );
 
-      if (fee.name === "LIFI Fixed Fee") {
-        lifiFee += amount;
-      } else if (fee.name === "CrossChain Fee") {
-        crossChainFee += amount;
-      } else {
-        otherFees += amount;
-      }
+    return this.formatResponse({
+      totalCost: roundUSD(totalCostUSD),
+      bridgeFee: roundUSD(totalFeeCostUSD),
+      gasFee: roundUSD(totalGasCostUSD),
+      outputAmount: estimate.toAmount,
+      estimatedTime: `${executionMinutes} mins`,
+      route: toolDetails?.name || "Best Route",
+      protocol: "LI.FI",
+      meta: {
+        tool: estimate.tool,
+        toolKey: toolDetails?.key,
+        toolName: toolDetails?.name,
+        toolLogoURI: toolDetails?.logoURI,
+        approvalAddress: estimate.approvalAddress,
+        toAmountMin: estimate.toAmountMin,
+        fromAmount: estimate.fromAmount,
+        executionDuration: estimate.executionDuration,
+        fromAmountUSD: estimate.fromAmountUSD,
+        toAmountUSD: estimate.toAmountUSD,
+        feeCosts: estimate.feeCosts,
+        gasCosts: estimate.gasCosts,
+      },
     });
-
-    const bridgeFees = lifiFee + crossChainFee + otherFees;
-    const totalCost = gasFees + bridgeFees;
-    const fromAmountUSD = parseUSD(estimate.fromAmountUSD);
-    const toAmountUSD = parseUSD(estimate.toAmountUSD);
-    const slippage = Math.max(0, fromAmountUSD - toAmountUSD);
-
-    return {
-      gasFees,
-      lifiFee,
-      crossChainFee,
-      otherFees,
-      bridgeFees,
-      totalCost,
-      fromAmountUSD,
-      toAmountUSD,
-      slippage,
-    };
   }
 }

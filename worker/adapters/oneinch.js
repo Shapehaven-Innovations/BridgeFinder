@@ -1,7 +1,4 @@
 // worker/adapters/oneinch.js
-import { BridgeAdapter } from "./base.js";
-import { CONFIG, TOKENS } from "../config.js";
-
 export class OneInchAdapter extends BridgeAdapter {
   constructor(config) {
     super("1inch", config);
@@ -12,22 +9,37 @@ export class OneInchAdapter extends BridgeAdapter {
     await this.checkRateLimit();
 
     const { fromChainId, toChainId, token, amount, sender } = params;
+
+    // [DEV-LOG] Request parameters
+    console.log(`[${this.name}] API Request:`, {
+      fromChainId,
+      toChainId,
+      token,
+      amount,
+      sender,
+    }); // REMOVE-FOR-PRODUCTION
+
     const tokenCfg = TOKENS[token];
-    if (!tokenCfg) throw new Error("1inch: unknown token");
+    if (!tokenCfg) {
+      throw new Error(`${this.name}: Unknown token ${token}`);
+    }
 
     const fromToken = this.getTokenAddress(token, fromChainId);
     const toToken = this.getTokenAddress(token, toChainId);
 
-    if (!fromToken || fromToken === "undefined") {
-      throw new Error(`1inch: No ${token} address on chain ${fromChainId}`);
-    }
-    if (!toToken || toToken === "undefined") {
-      throw new Error(`1inch: No ${token} address on chain ${toChainId}`);
+    if (!fromToken || !toToken) {
+      throw new Error(`${this.name}: Missing token addresses`);
     }
 
     const fromAmount = this.toUnits(amount, tokenCfg.decimals);
 
+    if (!env?.ONEINCH_API_KEY) {
+      throw new Error(`${this.name}: API key required (set ONEINCH_API_KEY)`);
+    }
+
     const isCrossChain = fromChainId !== toChainId;
+    const endpoint = isCrossChain ? "fusion/quoter/v1.0" : "swap/v5.2";
+    const chainParam = isCrossChain ? "" : `/${fromChainId}`;
 
     const queryParams = new URLSearchParams({
       src: fromToken,
@@ -35,65 +47,70 @@ export class OneInchAdapter extends BridgeAdapter {
       amount: fromAmount,
       from: sender,
       slippage: parseFloat(CONFIG.DEFAULT_SLIPPAGE) * 100,
-      disableEstimate: "false",
-      allowPartialFill: "false",
     });
 
-    try {
-      const headers = {
+    const url = `https://api.1inch.dev/${endpoint}${chainParam}/quote?${queryParams}`;
+
+    // [DEV-LOG] API URL
+    console.log(`[${this.name}] Fetching:`, url); // REMOVE-FOR-PRODUCTION
+
+    const res = await this.fetchWithTimeout(url, {
+      headers: {
+        Authorization: `Bearer ${env.ONEINCH_API_KEY}`,
         Accept: "application/json",
-        Authorization: `Bearer ${env?.ONEINCH_API_KEY || ""}`,
-      };
+      },
+    });
 
-      const endpoint = isCrossChain
-        ? `https://api.1inch.dev/fusion/quoter/v1.0/${fromChainId}/quote/receive`
-        : `https://api.1inch.dev/swap/v5.2/${fromChainId}/quote`;
+    // [DEV-LOG] HTTP Response Status
+    console.log(`[${this.name}] HTTP Status:`, res.status); // REMOVE-FOR-PRODUCTION
 
-      const res = await this.fetchWithTimeout(`${endpoint}?${queryParams}`, {
-        headers,
-      });
-
-      if (!res.ok) {
-        throw new Error(`1inch: HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      const estimatedGas = parseFloat(data.estimatedGas || "0");
-      const gasPrice = parseFloat(data.gasPrice || "5") / 1e9;
-      const gasUSD = (estimatedGas * gasPrice * 2000) / 1e18;
-
-      const protocolFee = isCrossChain ? 2 : 0;
-
-      return this.formatResponse({
-        totalCost: gasUSD + protocolFee,
-        bridgeFee: protocolFee,
-        gasFee: gasUSD,
-        estimatedTime: isCrossChain ? "3-5 mins" : "1-2 mins",
-        security: "Audited",
-        liquidity: "High",
-        route: isCrossChain ? "1inch Fusion+" : "1inch Aggregator",
-        outputAmount: data.toAmount || data.dstAmount,
-        protocol: "1inch",
-        meta: {
-          fees: [
-            { name: "Protocol Fee", amount: protocolFee },
-            { name: "Gas", amount: gasUSD },
-          ],
-        },
-      });
-    } catch (error) {
-      return this.formatResponse({
-        totalCost: 7,
-        bridgeFee: 2,
-        gasFee: 5,
-        estimatedTime: fromChainId !== toChainId ? "3-5 mins" : "1-2 mins",
-        security: "Audited",
-        liquidity: "High",
-        route: fromChainId !== toChainId ? "1inch Fusion+" : "1inch Aggregator",
-        protocol: "1inch",
-        isEstimated: true,
-      });
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => "No details");
+      // [DEV-LOG] Error Response
+      console.error(`[${this.name}] API Error:`, errorBody); // REMOVE-FOR-PRODUCTION
+      throw new Error(
+        `${this.name}: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
+      );
     }
+
+    const data = await res.json();
+
+    // [DEV-LOG] Full API Response
+    console.log(`[${this.name}] API Response:`, JSON.stringify(data, null, 2)); // REMOVE-FOR-PRODUCTION
+
+    if (!data || (!data.toAmount && !data.dstAmount)) {
+      throw new Error(`${this.name}: Invalid response - missing amount data`);
+    }
+
+    return this.mapToStandardFormat(data, isCrossChain);
+  }
+
+  mapToStandardFormat(apiResponse, isCrossChain) {
+    const parseUSD = (value) => {
+      const num = parseFloat(value || "0");
+      return isNaN(num) ? 0 : num;
+    };
+
+    const gasUSD =
+      (parseUSD(apiResponse.estimatedGas) *
+        parseUSD(apiResponse.gasPrice) *
+        2000) /
+      1e18;
+    const protocolFee = parseUSD(apiResponse.protocolFee) / 1e6 || 0;
+
+    return this.formatResponse({
+      totalCost: gasUSD + protocolFee,
+      bridgeFee: protocolFee,
+      gasFee: gasUSD,
+      estimatedTime: isCrossChain ? "3-5 mins" : "1-2 mins",
+      route: isCrossChain ? "1inch Fusion+" : "1inch Aggregator",
+      protocol: "1inch",
+      outputAmount: apiResponse.toAmount || apiResponse.dstAmount,
+      meta: {
+        tool: "1inch",
+        protocols: apiResponse.protocols,
+        estimatedGas: apiResponse.estimatedGas,
+      },
+    });
   }
 }
