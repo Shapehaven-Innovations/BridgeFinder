@@ -1,4 +1,7 @@
 // worker/adapters/rango.js
+import { BridgeAdapter } from "./base.js";
+import { CONFIG, TOKENS } from "../config.js";
+
 export class RangoAdapter extends BridgeAdapter {
   constructor(config) {
     super("Rango", config);

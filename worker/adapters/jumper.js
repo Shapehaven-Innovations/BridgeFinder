@@ -1,4 +1,7 @@
 // worker/adapters/jumper.js
+import { BridgeAdapter } from "./base.js";
+import { CONFIG, TOKENS } from "../config.js";
+
 export class JumperAdapter extends BridgeAdapter {
   constructor(config) {
     super("Jumper", config);

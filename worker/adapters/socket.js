@@ -1,4 +1,7 @@
 // worker/adapters/socket.js
+import { BridgeAdapter } from "./base.js";
+import { CONFIG, TOKENS } from "../config.js";
+
 export class SocketAdapter extends BridgeAdapter {
   constructor(config) {
     super("Socket", config);

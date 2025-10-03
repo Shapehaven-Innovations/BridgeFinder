@@ -1,4 +1,7 @@
 // worker/adapters/openocean.js
+import { BridgeAdapter } from "./base.js";
+import { CONFIG, TOKENS } from "../config.js";
+
 export class OpenOceanAdapter extends BridgeAdapter {
   constructor(config) {
     super("OpenOcean", config);

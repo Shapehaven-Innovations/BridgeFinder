@@ -1,4 +1,7 @@
 // worker/adapters/squid.js
+import { BridgeAdapter } from "./base.js";
+import { CONFIG, TOKENS } from "../config.js";
+
 export class SquidAdapter extends BridgeAdapter {
   constructor(config) {
     super("Squid", config);

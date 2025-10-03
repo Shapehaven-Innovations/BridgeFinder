@@ -1,4 +1,7 @@
 // worker/adapters/xyfinance.js
+import { BridgeAdapter } from "./base.js";
+import { CONFIG, TOKENS } from "../config.js";
+
 export class XYFinanceAdapter extends BridgeAdapter {
   constructor(config) {
     super("XY Finance", config);

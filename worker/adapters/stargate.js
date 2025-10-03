@@ -1,4 +1,7 @@
 // worker/adapters/stargate.js
+import { BridgeAdapter } from "./base.js";
+import { CONFIG, TOKENS } from "../config.js";
+
 export class StargateAdapter extends BridgeAdapter {
   constructor(config) {
     super("Stargate", config);
