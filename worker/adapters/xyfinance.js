@@ -101,16 +101,20 @@ export class XYFinanceAdapter extends BridgeAdapter {
       return isNaN(num) ? 0 : num;
     };
 
-    // XY Finance returns values in token units, need to convert to human-readable
-    const toTokenAmount =
-      parseUSD(data.toTokenAmount) / Math.pow(10, tokenCfg.decimals);
+    // Parse XY Finance fee structure - xyFee is an object with {amount, symbol}
+    const xyFeeAmount = data.xyFee?.amount ? parseUSD(data.xyFee.amount) : 0;
+    const crossChainFeeAmount = data.crossChainFee?.amount
+      ? parseUSD(data.crossChainFee.amount)
+      : 0;
 
-    // Parse fees - XY Finance uses different fee structure
-    const xyFeeUSD = parseUSD(data.xyFee || 0);
-    const crossChainFeeUSD = parseUSD(data.crossChainFee || 0);
-    const gasFeeUSD = parseUSD(data.estimatedGas || 0) / 1e9; // Gas in gwei
+    // XY Finance doesn't provide gas cost in USD directly
+    // estimatedGas is just the gas limit (e.g., 150000), not the cost
+    // We'll estimate based on typical Polygon gas prices (~30 gwei) and POL price (~$0.24)
+    const gasLimit = parseUSD(data.estimatedGas || 0);
+    const estimatedGasCostUSD = gasLimit > 0 ? gasLimit * 30e-9 * 0.24 : 0;
 
-    const totalCostUSD = xyFeeUSD + crossChainFeeUSD + gasFeeUSD;
+    const totalCostUSD =
+      xyFeeAmount + crossChainFeeAmount + estimatedGasCostUSD;
 
     // Convert transfer time from seconds to minutes
     const estimatedMinutes = Math.ceil(
@@ -119,8 +123,8 @@ export class XYFinanceAdapter extends BridgeAdapter {
 
     return this.formatResponse({
       totalCost: totalCostUSD,
-      bridgeFee: xyFeeUSD + crossChainFeeUSD,
-      gasFee: gasFeeUSD,
+      bridgeFee: xyFeeAmount + crossChainFeeAmount,
+      gasFee: estimatedGasCostUSD,
       estimatedTime: `${estimatedMinutes} mins`,
       route: "XY Finance Bridge",
       protocol: "Y Pool",
