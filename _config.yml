@@ -1,0 +1,5 @@
+# GitHub Pages configuration for BridgeFinder site
+# Enforce custom domain and SSL
+
+url: "https://rout3r.xyz"
+enforce_ssl: rout3r.xyz
