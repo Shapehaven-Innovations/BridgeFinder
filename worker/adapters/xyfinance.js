@@ -78,44 +78,65 @@ export class XYFinanceAdapter extends BridgeAdapter {
     // [DEV-LOG] Full API Response
     console.log(`[${this.name}] API Response:`, JSON.stringify(data, null, 2)); // REMOVE-FOR-PRODUCTION
 
-    if (!data.success || !data.routes || !data.routes[0]) {
-      throw new Error(`${this.name}: No routes found`);
+    // XY Finance uses isSuccess field, not success
+    if (!data.isSuccess) {
+      // Handle timeout or failure with descriptive message
+      const errorMsg = data.msg || "No routes found";
+      throw new Error(`${this.name}: ${errorMsg}`);
     }
 
-    return this.mapToStandardFormat(data.routes[0], tokenCfg);
+    // Check if we have a valid quote
+    if (!data.quote || data.toTokenAmount === "0") {
+      throw new Error(
+        `${this.name}: No viable route available for this bridge path`
+      );
+    }
+
+    return this.mapToStandardFormat(data, tokenCfg);
   }
 
-  mapToStandardFormat(route, tokenCfg) {
+  mapToStandardFormat(data, tokenCfg) {
     const parseUSD = (value) => {
       const num = parseFloat(value || "0");
       return isNaN(num) ? 0 : num;
     };
 
-    // Calculate fees based on route data
-    const bridgeFeeUSD =
-      parseUSD(route.bridgeFee?.amount) / Math.pow(10, tokenCfg.decimals);
-    const gasFeeUSD =
-      parseUSD(route.gasFee?.amount) / Math.pow(10, tokenCfg.decimals);
+    // XY Finance returns values in token units, need to convert to human-readable
+    const toTokenAmount =
+      parseUSD(data.toTokenAmount) / Math.pow(10, tokenCfg.decimals);
 
-    // If fees are in tokens, multiply by approximate token price
-    // XY Finance typically returns fees in the source token
-    const totalCostUSD = bridgeFeeUSD + gasFeeUSD;
+    // Parse fees - XY Finance uses different fee structure
+    const xyFeeUSD = parseUSD(data.xyFee || 0);
+    const crossChainFeeUSD = parseUSD(data.crossChainFee || 0);
+    const gasFeeUSD = parseUSD(data.estimatedGas || 0) / 1e9; // Gas in gwei
+
+    const totalCostUSD = xyFeeUSD + crossChainFeeUSD + gasFeeUSD;
+
+    // Convert transfer time from seconds to minutes
+    const estimatedMinutes = Math.ceil(
+      (data.estimatedTransferTime || 180) / 60
+    );
 
     return this.formatResponse({
       totalCost: totalCostUSD,
-      bridgeFee: bridgeFeeUSD,
+      bridgeFee: xyFeeUSD + crossChainFeeUSD,
       gasFee: gasFeeUSD,
-      estimatedTime: `${Math.ceil((route.estimatedTime || 180) / 60)} mins`,
+      estimatedTime: `${estimatedMinutes} mins`,
       route: "XY Finance Bridge",
       protocol: "Y Pool",
-      outputAmount: route.dstQuoteTokenAmount,
+      outputAmount: data.toTokenAmount,
       meta: {
         tool: "xyfinance",
-        estimatedTime: route.estimatedTime,
-        srcChainId: route.srcChainId,
-        destChainId: route.destChainId,
-        bridgeFee: route.bridgeFee,
-        gasFee: route.gasFee,
+        isSuccess: data.isSuccess,
+        statusCode: data.statusCode,
+        estimatedTransferTime: data.estimatedTransferTime,
+        transactionCounts: data.transactionCounts,
+        minimumReceived: data.minimumReceived,
+        fromTokenValue: data.fromTokenValue,
+        toTokenValue: data.toTokenValue,
+        xyFee: data.xyFee,
+        crossChainFee: data.crossChainFee,
+        contractAddress: data.contractAddress,
       },
     });
   }
