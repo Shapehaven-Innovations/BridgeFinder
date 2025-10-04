@@ -1,4 +1,4 @@
-// worker/adapters/xyfinance.js
+// worker/adapters/xyfinance.js - REFACTORED with correct API parameters
 import { BridgeAdapter } from "./base.js";
 import { CONFIG, TOKENS } from "../config.js";
 
@@ -11,7 +11,7 @@ export class XYFinanceAdapter extends BridgeAdapter {
   async getQuote(params, env) {
     await this.checkRateLimit();
 
-    const { fromChainId, toChainId, token, amount, sender } = params;
+    const { fromChainId, toChainId, token, amount, sender, slippage } = params;
 
     // [DEV-LOG] Request parameters
     console.log(`[${this.name}] API Request:`, {
@@ -36,13 +36,19 @@ export class XYFinanceAdapter extends BridgeAdapter {
 
     const fromAmount = this.toUnits(amount, tokenCfg.decimals);
 
+    // FIXED: Use correct parameter names as per XY Finance API spec
     const queryParams = new URLSearchParams({
-      srcChainId: String(fromChainId),
-      srcQuoteTokenAddress: fromToken,
-      srcQuoteTokenAmount: fromAmount,
-      dstChainId: String(toChainId),
-      dstQuoteTokenAddress: toToken,
-      slippage: CONFIG.DEFAULT_SLIPPAGE,
+      // Source chain parameters
+      srcChainId: String(fromChainId), // Chain ID remains srcChainId
+      fromTokenAddress: fromToken, // FIXED: was srcQuoteTokenAddress
+      amount: fromAmount, // FIXED: was srcQuoteTokenAmount
+
+      // Destination chain parameters
+      destChainId: String(toChainId), // FIXED: was dstChainId
+      toTokenAddress: toToken, // FIXED: was dstQuoteTokenAddress
+
+      // Optional parameters
+      slippage: slippage || CONFIG.DEFAULT_SLIPPAGE,
       receiver: sender,
     });
 
@@ -76,29 +82,40 @@ export class XYFinanceAdapter extends BridgeAdapter {
       throw new Error(`${this.name}: No routes found`);
     }
 
-    return this.mapToStandardFormat(data.routes[0]);
+    return this.mapToStandardFormat(data.routes[0], tokenCfg);
   }
 
-  mapToStandardFormat(route) {
+  mapToStandardFormat(route, tokenCfg) {
     const parseUSD = (value) => {
       const num = parseFloat(value || "0");
       return isNaN(num) ? 0 : num;
     };
 
-    const feeUSD = parseUSD(route.bridgeFee?.amount) / 1e6;
-    const gasUSD = (parseUSD(route.gasFee?.amount) / 1e18) * 2000;
+    // Calculate fees based on route data
+    const bridgeFeeUSD =
+      parseUSD(route.bridgeFee?.amount) / Math.pow(10, tokenCfg.decimals);
+    const gasFeeUSD =
+      parseUSD(route.gasFee?.amount) / Math.pow(10, tokenCfg.decimals);
+
+    // If fees are in tokens, multiply by approximate token price
+    // XY Finance typically returns fees in the source token
+    const totalCostUSD = bridgeFeeUSD + gasFeeUSD;
 
     return this.formatResponse({
-      totalCost: feeUSD + gasUSD,
-      bridgeFee: feeUSD,
-      gasFee: gasUSD,
+      totalCost: totalCostUSD,
+      bridgeFee: bridgeFeeUSD,
+      gasFee: gasFeeUSD,
       estimatedTime: `${Math.ceil((route.estimatedTime || 180) / 60)} mins`,
-      route: "XY Finance",
+      route: "XY Finance Bridge",
       protocol: "Y Pool",
       outputAmount: route.dstQuoteTokenAmount,
       meta: {
         tool: "xyfinance",
         estimatedTime: route.estimatedTime,
+        srcChainId: route.srcChainId,
+        destChainId: route.destChainId,
+        bridgeFee: route.bridgeFee,
+        gasFee: route.gasFee,
       },
     });
   }
