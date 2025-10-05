@@ -11,7 +11,6 @@ export class Toast {
 
   static show(message, type = "info", duration = 3000) {
     if (!Toast.container) {
-      // Try to find container if not initialized
       Toast.container = document.getElementById("toasts");
       if (!Toast.container) {
         console.warn("Toast container not found");
@@ -21,8 +20,10 @@ export class Toast {
 
     const id = ++Toast.counter;
     const toast = document.createElement("div");
-    toast.className = `toast ${type} slide-in`;
+    toast.className = `toast ${type}`;
     toast.dataset.toastId = id;
+    toast.setAttribute("role", "alert");
+    toast.setAttribute("aria-live", type === "error" ? "assertive" : "polite");
 
     const icons = {
       success: "✅",
@@ -32,9 +33,9 @@ export class Toast {
     };
 
     toast.innerHTML = `
-      <span class="toast-icon">${icons[type]}</span>
+      <span class="toast-icon" aria-hidden="true">${icons[type]}</span>
       <span class="toast-message">${message}</span>
-      <button class="toast-close" data-toast-id="${id}">✕</button>
+      <button class="toast-close" data-toast-id="${id}" aria-label="Close notification">✕</button>
     `;
 
     Toast.container.appendChild(toast);
@@ -44,8 +45,9 @@ export class Toast {
     const closeBtn = toast.querySelector(".toast-close");
     closeBtn.addEventListener("click", () => Toast.remove(id));
 
-    // Auto-remove
-    setTimeout(() => Toast.remove(id), duration);
+    // Auto-remove with cleanup
+    const timeoutId = setTimeout(() => Toast.remove(id), duration);
+    toast.dataset.timeoutId = timeoutId;
 
     return id;
   }
@@ -54,11 +56,19 @@ export class Toast {
     const toast = Toast.toasts.get(id);
     if (!toast) return;
 
-    toast.style.animation = "slide-out 250ms ease-in-out";
+    // Clear timeout if exists
+    if (toast.dataset.timeoutId) {
+      clearTimeout(parseInt(toast.dataset.timeoutId));
+    }
+
+    // Fade out animation
+    toast.style.opacity = "0";
+    toast.style.transform = "translateX(100%)";
+
     setTimeout(() => {
       toast.remove();
       Toast.toasts.delete(id);
-    }, 250);
+    }, 300);
   }
 
   static clear() {

@@ -17,7 +17,7 @@ export class StateManager {
   }
 
   /**
-   * Set state value(s)
+   * Set state value(s) - supports both single key-value and object updates
    */
   set(keyOrObject, value) {
     const oldState = { ...this.state };
@@ -32,12 +32,11 @@ export class StateManager {
       this.notify(keyOrObject, value, oldState[keyOrObject]);
     }
 
-    // Add to history
     this.addToHistory({ timestamp: Date.now(), state: { ...this.state } });
   }
 
   /**
-   * Subscribe to state changes
+   * Subscribe to state changes for a specific key or all changes (*)
    */
   subscribe(key, callback) {
     if (!this.subscribers.has(key)) {
@@ -57,6 +56,7 @@ export class StateManager {
   notify(key, newValue, oldValue) {
     if (newValue === oldValue) return;
 
+    // Notify key-specific subscribers
     this.subscribers.get(key)?.forEach((callback) => {
       try {
         callback(newValue, oldValue);
@@ -67,15 +67,21 @@ export class StateManager {
 
     // Notify wildcard subscribers
     this.subscribers.get("*")?.forEach((callback) => {
-      callback({ key, newValue, oldValue });
+      try {
+        callback({ key, newValue, oldValue });
+      } catch (error) {
+        console.error("Wildcard subscriber error:", error);
+      }
     });
   }
 
   /**
-   * Add state to history
+   * Add state snapshot to history
    */
   addToHistory(entry) {
     this.history.push(entry);
+
+    // Maintain history limit
     if (this.history.length > this.maxHistory) {
       this.history.shift();
     }
@@ -89,11 +95,12 @@ export class StateManager {
   }
 
   /**
-   * Reset state
+   * Reset state to initial or provided state
    */
   reset(initialState = {}) {
     const oldState = { ...this.state };
     this.state = initialState;
+
     Object.keys(oldState).forEach((key) => {
       this.notify(key, initialState[key], oldState[key]);
     });

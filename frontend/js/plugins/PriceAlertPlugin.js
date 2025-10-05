@@ -15,8 +15,6 @@ export class PriceAlertPlugin {
   init({ events, state }) {
     this.events = events;
     this.state = state;
-
-    // Load user preferences
     this.loadPreferences();
   }
 
@@ -57,18 +55,13 @@ export class PriceAlertPlugin {
       if (savings > 5) {
         alerts.push({
           type: "success",
-          message: `💰 Huge savings potential: $${savings.toFixed(
-            2,
-          )} difference between bridges!`,
+          message: `💰 Huge savings potential: $${savings.toFixed(2)} difference between bridges!`,
           priority: "high",
         });
       }
     }
 
-    // Show alerts
     this.showAlerts(alerts);
-
-    // Store for history
     this.storeAlertHistory(alerts, cheapest);
 
     return results;
@@ -80,7 +73,7 @@ export class PriceAlertPlugin {
         Toast.show(
           alert.message,
           alert.type,
-          alert.priority === "high" ? 5000 : 3000,
+          alert.priority === "high" ? 5000 : 3000
         );
       }
     });
@@ -128,7 +121,7 @@ export class PriceAlertPlugin {
       "price_alert_prefs",
       JSON.stringify({
         thresholds: this.thresholds,
-      }),
+      })
     );
   }
 

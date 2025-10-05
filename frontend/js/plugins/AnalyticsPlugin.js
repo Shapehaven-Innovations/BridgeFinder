@@ -12,7 +12,6 @@ export class AnalyticsPlugin {
     this.events = events;
     this.config = config;
 
-    // Track page load
     this.track("page_load", {
       timestamp: Date.now(),
       sessionId: this.sessionId,
@@ -24,16 +23,16 @@ export class AnalyticsPlugin {
     events.on("search:complete", (data) =>
       this.track("search_complete", {
         resultCount: data.bridges?.length,
-      }),
+      })
     );
     events.on("bridge:selected", (bridge) =>
       this.track("bridge_selected", {
         bridge: bridge.name,
         cost: bridge.totalCost,
-      }),
+      })
     );
     events.on("theme:changed", (theme) =>
-      this.track("theme_changed", { theme }),
+      this.track("theme_changed", { theme })
     );
   }
 
@@ -67,7 +66,7 @@ export class AnalyticsPlugin {
       ...data,
     };
 
-    // Send to analytics service
+    // Send to analytics service if enabled
     if (this.config?.features?.enableAnalytics) {
       this.sendToAnalytics(eventData);
     }
@@ -80,20 +79,13 @@ export class AnalyticsPlugin {
 
   async sendToAnalytics(data) {
     try {
-      // In production, send to your analytics service
-      // await fetch('/api/analytics', {
-      //     method: 'POST',
-      //     headers: { 'Content-Type': 'application/json' },
-      //     body: JSON.stringify(data)
-      // });
-
-      // For now, just store in localStorage
+      // Store in localStorage for now
       const stored = JSON.parse(
-        localStorage.getItem("bridge_analytics") || "[]",
+        localStorage.getItem("bridge_analytics") || "[]"
       );
       stored.push(data);
 
-      // Keep only last 100 events
+      // Keep only last 100 events to prevent storage overflow
       if (stored.length > 100) {
         stored.shift();
       }
