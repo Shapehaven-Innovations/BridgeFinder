@@ -12,7 +12,12 @@ export default defineConfig({
       '@styles': path.resolve(__dirname, './styles'),
     },
   },
-  base: '/',
+  // IMPORTANT: Set this to your repo name for GitHub Pages
+  // Format: '/repo-name/'
+  // Example: If your repo is 'BridgeFinder', use '/BridgeFinder/'
+  // If deploying to user/org site (username.github.io), use '/'
+  base: '/BridgeFinder/', // <-- CHANGE THIS to match your repo name
+
   server: {
     port: 3000,
     proxy: {
