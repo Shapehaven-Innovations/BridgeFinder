@@ -12,10 +12,7 @@ export default defineConfig({
       '@styles': path.resolve(__dirname, './styles'),
     },
   },
-  // IMPORTANT: Set this to your repo name for GitHub Pages
-  // Format: '/repo-name/'
-  // Example: If your repo is 'BridgeFinder', use '/BridgeFinder/'
-  // If deploying to user/org site (username.github.io), use '/'
+
   base: 'https://github.com/Shapehaven-Innovations/BridgeFinder', // <-- CHANGE THIS to match your repo name
 
   server: {
