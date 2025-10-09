@@ -16,7 +16,7 @@ export default defineConfig({
   // Format: '/repo-name/'
   // Example: If your repo is 'BridgeFinder', use '/BridgeFinder/'
   // If deploying to user/org site (username.github.io), use '/'
-  base: '/BridgeFinder/', // <-- CHANGE THIS to match your repo name
+  base: 'https://github.com/Shapehaven-Innovations/BridgeFinder', // <-- CHANGE THIS to match your repo name
 
   server: {
     port: 3000,
