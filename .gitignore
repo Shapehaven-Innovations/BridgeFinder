@@ -39,8 +39,6 @@ npm-debug.log*
 
 # Dependencies (if you add any later)
 node_modules/
-package-lock.json
-
 # Environment variables
 .env
 .env.local
