@@ -12,8 +12,10 @@ export default defineConfig({
       '@styles': path.resolve(__dirname, './styles'),
     },
   },
-
-  base: 'https://github.com/Shapehaven-Innovations/BridgeFinder', // <-- CHANGE THIS to match your repo name
+  // IMPORTANT: GitHub Pages base path
+  // Your repo: https://github.com/Shapehaven-Innovations/BridgeFinder
+  // Deployed at: https://shapehaven-innovations.github.io/BridgeFinder/
+  base: '/BridgeFinder/',
 
   server: {
     port: 3000,
