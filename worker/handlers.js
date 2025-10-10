@@ -1,12 +1,12 @@
 // worker/handlers.js
-import { CONFIG, CHAINS, TOKENS, getProtocolInfo } from "./config.js";
-import { AdapterFactory } from "./factory.js";
+import { CONFIG, CHAINS, TOKENS, getProtocolInfo } from './config.js'
+import { AdapterFactory } from './factory.js'
 import {
   json,
   ZERO_ADDRESS,
   delayedCall,
   generateReferralUrl,
-} from "./utils.js";
+} from './utils.js'
 /**
  * Enrich bridge response with protocol metadata
  *
@@ -19,17 +19,17 @@ import {
 function enrichBridgeWithProtocolMetadata(bridge) {
   // Skip enrichment for unavailable bridges if they don't have meta
   if (bridge.unavailable && !bridge.meta?.tool) {
-    return bridge;
+    return bridge
   }
 
   // Get tool key from adapter's meta
   // LiFi adapters pass tool key (e.g., "across", "stargate")
   // Direct adapters use their protocol name
   const toolKey =
-    bridge.meta?.tool || bridge.meta?.toolKey || bridge.protocol?.toLowerCase();
+    bridge.meta?.tool || bridge.meta?.toolKey || bridge.protocol?.toLowerCase()
 
   // Look up protocol info from configuration
-  const protocolInfo = getProtocolInfo(toolKey);
+  const protocolInfo = getProtocolInfo(toolKey)
 
   // Return enriched bridge response
   return {
@@ -38,22 +38,22 @@ function enrichBridgeWithProtocolMetadata(bridge) {
     security: protocolInfo.security,
     liquidity: protocolInfo.liquidity,
     auditStatus: protocolInfo.auditStatus,
-  };
+  }
 }
 
 export async function handleCompare(request, env, debug) {
   try {
     const { fromChainId, toChainId, token, amount, fromAddress, slippage } =
-      await request.json();
+      await request.json()
 
-    console.log("[Handler] Received request:", {
+    console.log('[Handler] Received request:', {
       fromChainId,
       toChainId,
       token,
       amount,
       fromAddress,
       slippage,
-    });
+    })
 
     // Validation
     if (!fromChainId || !toChainId || !token || !amount) {
@@ -61,35 +61,32 @@ export async function handleCompare(request, env, debug) {
         {
           success: false,
           error:
-            "Missing required parameters (fromChainId, toChainId, token, amount)",
+            'Missing required parameters (fromChainId, toChainId, token, amount)',
         },
         400
-      );
+      )
     }
 
     if (fromChainId === toChainId) {
       return json(
         {
           success: false,
-          error: "Source and destination chains must be different",
+          error: 'Source and destination chains must be different',
         },
         400
-      );
+      )
     }
 
     // Get sender address
-    const sender = fromAddress || env.QUOTE_FROM_ADDRESS || ZERO_ADDRESS;
-    if (!sender || sender === ZERO_ADDRESS) {
-      return json(
-        {
-          success: false,
-          error: "Valid wallet address required",
-          details:
-            "Set QUOTE_FROM_ADDRESS secret or pass fromAddress in request body",
-        },
-        400
-      );
-    }
+    // Use a safe public address for quotes (not for transactions)
+    // This is Vitalik's public address - safe to use for price quotes
+    const DEFAULT_QUOTE_ADDRESS = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045'
+
+    // Get sender address - prioritize env var, fallback to safe default
+    const sender =
+      fromAddress || env.QUOTE_FROM_ADDRESS || DEFAULT_QUOTE_ADDRESS
+
+    console.log('[Handler] Using address for quote:', sender)
 
     const params = {
       fromChainId,
@@ -97,51 +94,51 @@ export async function handleCompare(request, env, debug) {
       token,
       amount,
       sender,
-      slippage: slippage || "0.01", // Add slippage parameter with default
-    };
+      slippage: slippage || '0.01', // Add slippage parameter with default
+    }
 
-    console.log("[Handler] Parameters being passed to adapters:", params);
+    console.log('[Handler] Parameters being passed to adapters:', params)
 
     // Create adapter instances and group by priority
-    const adapterGroups = [];
-    const priorityGroups = {};
+    const adapterGroups = []
+    const priorityGroups = {}
 
     for (const [key, config] of Object.entries(CONFIG.PROVIDERS)) {
-      if (!config.enabled) continue;
+      if (!config.enabled) continue
 
-      const priority = config.priority;
+      const priority = config.priority
       if (!priorityGroups[priority]) {
-        priorityGroups[priority] = [];
+        priorityGroups[priority] = []
       }
 
       try {
-        const adapter = AdapterFactory.createAdapter(config.adapter, config);
+        const adapter = AdapterFactory.createAdapter(config.adapter, config)
         priorityGroups[priority].push({
           name: key,
           adapter,
           config,
-        });
+        })
         console.log(
           `[Handler] Created adapter: ${key} with priority ${priority}`
-        );
+        )
       } catch (error) {
-        console.error(`Failed to create adapter ${key}:`, error.message);
+        console.error(`Failed to create adapter ${key}:`, error.message)
       }
     }
 
     // Sort priorities and create delayed calls
-    const sortedPriorities = Object.keys(priorityGroups).sort((a, b) => a - b);
-    const providerCalls = [];
-    let delay = 0;
+    const sortedPriorities = Object.keys(priorityGroups).sort((a, b) => a - b)
+    const providerCalls = []
+    let delay = 0
 
     for (const priority of sortedPriorities) {
-      const group = priorityGroups[priority];
+      const group = priorityGroups[priority]
 
       for (const { name, adapter, config } of group) {
         // Skip adapters that require auth if no key is provided
         if (config.requiresAuth && !env[`${name}_API_KEY`]) {
-          if (debug) console.log(`Skipping ${name}: API key required`);
-          continue;
+          if (debug) console.log(`Skipping ${name}: API key required`)
+          continue
         }
 
         providerCalls.push({
@@ -150,101 +147,101 @@ export async function handleCompare(request, env, debug) {
             delay === 0
               ? () => adapter.getQuote(params, env)
               : () => delayedCall(() => adapter.getQuote(params, env), delay),
-        });
+        })
       }
 
       // Increase delay for next priority group
-      delay += 500;
+      delay += 500
     }
 
     console.log(
       `[Handler] Calling ${providerCalls.length} adapters:`,
       providerCalls.map((p) => p.name)
-    );
+    )
 
     // Execute all provider calls
     const results = await Promise.allSettled(
       providerCalls.map(async (call) => {
         try {
-          const result = await call.fn();
+          const result = await call.fn()
           // If adapter returns null, it means complete failure
           if (result === null) {
             return {
               provider: call.name,
               failed: true,
-              error: "Provider returned no response",
-            };
+              error: 'Provider returned no response',
+            }
           }
-          return { ...result, _provider: call.name };
+          return { ...result, _provider: call.name }
         } catch (error) {
-          console.error(`${call.name} error:`, error.message);
+          console.error(`${call.name} error:`, error.message)
           return {
             error: error.message,
             provider: call.name,
             failed: true,
-          };
+          }
         }
       })
-    );
+    )
 
     // Separate available and unavailable bridges
-    const availableBridges = [];
-    const unavailableBridges = [];
+    const availableBridges = []
+    const unavailableBridges = []
 
     results.forEach((r) => {
-      if (r.status === "fulfilled" && r.value && !r.value.failed) {
+      if (r.status === 'fulfilled' && r.value && !r.value.failed) {
         if (r.value.unavailable) {
-          unavailableBridges.push(r.value);
+          unavailableBridges.push(r.value)
         } else if (r.value.totalCost != null && r.value.totalCost > 0) {
-          availableBridges.push(r.value);
+          availableBridges.push(r.value)
         }
       }
-    });
+    })
     // Enrich bridges with protocol metadata
-    console.log("[Handler] Enriching bridges with protocol metadata...");
+    console.log('[Handler] Enriching bridges with protocol metadata...')
 
     const enrichedAvailableBridges = availableBridges.map((bridge) => {
-      return enrichBridgeWithProtocolMetadata(bridge);
-    });
+      return enrichBridgeWithProtocolMetadata(bridge)
+    })
 
     const enrichedUnavailableBridges = unavailableBridges.map((bridge) => {
-      return enrichBridgeWithProtocolMetadata(bridge);
-    });
+      return enrichBridgeWithProtocolMetadata(bridge)
+    })
 
     // Sort available bridges by cost
-    enrichedAvailableBridges.sort((a, b) => a.totalCost - b.totalCost);
+    enrichedAvailableBridges.sort((a, b) => a.totalCost - b.totalCost)
 
     // Sort unavailable bridges alphabetically
-    enrichedUnavailableBridges.sort((a, b) => a.name.localeCompare(b.name));
+    enrichedUnavailableBridges.sort((a, b) => a.name.localeCompare(b.name))
 
     const failures = debug
       ? results
           .filter(
             (r) =>
-              r.status === "rejected" ||
-              (r.status === "fulfilled" && r.value?.failed)
+              r.status === 'rejected' ||
+              (r.status === 'fulfilled' && r.value?.failed)
           )
           .map((r, i) => ({
             provider: providerCalls[i].name,
             status: r.status,
-            error: r.status === "rejected" ? r.reason?.message : r.value?.error,
+            error: r.status === 'rejected' ? r.reason?.message : r.value?.error,
           }))
-      : undefined;
+      : undefined
 
     console.log(
       `[Handler] Results: ${enrichedAvailableBridges.length} available, ${enrichedUnavailableBridges.length} unavailable`
-    );
+    )
 
     // Combine available and unavailable bridges
     const allBridges = [
       ...enrichedAvailableBridges,
       ...enrichedUnavailableBridges,
-    ];
+    ]
 
     if (allBridges.length === 0) {
       return json({
         success: false,
-        error: "No providers responded",
+        error: 'No providers responded',
         details: debug
           ? {
               providers: providerCalls.map((p) => p.name),
@@ -252,7 +249,7 @@ export async function handleCompare(request, env, debug) {
             }
           : undefined,
         bridges: [],
-      });
+      })
     }
 
     // Add metadata to bridges
@@ -265,10 +262,10 @@ export async function handleCompare(request, env, debug) {
           isBest: false,
           savings: null,
           url: null,
-        };
+        }
       }
 
-      const availableIndex = enrichedAvailableBridges.indexOf(bridge);
+      const availableIndex = enrichedAvailableBridges.indexOf(bridge)
       return {
         ...bridge,
         position: availableIndex + 1,
@@ -279,8 +276,8 @@ export async function handleCompare(request, env, debug) {
                 .totalCost - bridge.totalCost
             : 0,
         url: generateReferralUrl(bridge, env),
-      };
-    });
+      }
+    })
 
     return json({
       success: true,
@@ -308,44 +305,44 @@ export async function handleCompare(request, env, debug) {
         failures: debug ? failures : undefined,
       },
       timestamp: new Date().toISOString(),
-    });
+    })
   } catch (error) {
-    console.error("Compare error:", error);
+    console.error('Compare error:', error)
     return json(
       {
         success: false,
-        error: "Failed to compare bridges",
+        error: 'Failed to compare bridges',
         details: error.message,
       },
       500
-    );
+    )
   }
 }
 
 export async function testAdapter(request, env) {
   try {
-    const { adapter: adapterName, ...params } = await request.json();
+    const { adapter: adapterName, ...params } = await request.json()
 
     if (!adapterName) {
-      return json({ success: false, error: "Adapter name required" }, 400);
+      return json({ success: false, error: 'Adapter name required' }, 400)
     }
 
-    const config = CONFIG.PROVIDERS[adapterName.toUpperCase()];
+    const config = CONFIG.PROVIDERS[adapterName.toUpperCase()]
     if (!config) {
-      return json({ success: false, error: "Unknown adapter" }, 400);
+      return json({ success: false, error: 'Unknown adapter' }, 400)
     }
 
-    const adapter = AdapterFactory.createAdapter(config.adapter, config);
-    const result = await adapter.getQuote(params, env);
+    const adapter = AdapterFactory.createAdapter(config.adapter, config)
+    const result = await adapter.getQuote(params, env)
 
     // Enrich test adapter response too
-    const enrichedResult = enrichBridgeWithProtocolMetadata(result);
+    const enrichedResult = enrichBridgeWithProtocolMetadata(result)
 
     return json({
       success: true,
       adapter: adapterName,
       result: enrichedResult,
-    });
+    })
   } catch (error) {
     return json(
       {
@@ -353,19 +350,19 @@ export async function testAdapter(request, env) {
         error: error.message,
       },
       500
-    );
+    )
   }
 }
 
 export function handleStatus(env) {
-  const providers = {};
+  const providers = {}
 
   for (const [key, config] of Object.entries(CONFIG.PROVIDERS)) {
     const status = config.enabled
       ? config.requiresAuth && !env[`${key}_API_KEY`]
-        ? "Disabled (no key)"
-        : "Active"
-      : "Disabled";
+        ? 'Disabled (no key)'
+        : 'Active'
+      : 'Disabled'
     providers[key.toLowerCase()] = {
       status,
       adapter: config.adapter,
@@ -373,57 +370,57 @@ export function handleStatus(env) {
       rateLimit: `${config.rateLimit.requests} req/${
         config.rateLimit.window / 1000
       }s`,
-    };
+    }
   }
 
   return {
-    status: "operational",
-    version: "5.0",
-    architecture: "Modular Adapter System",
-    environment: env.ENVIRONMENT || "production",
+    status: 'operational',
+    version: '5.0',
+    architecture: 'Modular Adapter System',
+    environment: env.ENVIRONMENT || 'production',
     timestamp: new Date().toISOString(),
     settings: {
-      integrator: env.INTEGRATOR_NAME || "BridgeAggregator",
-      feeReceiver: env.FEE_RECEIVER_ADDRESS || "Not configured",
+      integrator: env.INTEGRATOR_NAME || 'BridgeAggregator',
+      feeReceiver: env.FEE_RECEIVER_ADDRESS || 'Not configured',
       quoteAddress: env.QUOTE_FROM_ADDRESS
-        ? "Configured"
-        : "Using zero address",
+        ? 'Configured'
+        : 'Using zero address',
     },
     providers,
     features: {
-      caching: "30 second TTL",
-      rateLimit: "Per-adapter rate limiting",
+      caching: '30 second TTL',
+      rateLimit: 'Per-adapter rate limiting',
       retry: `${CONFIG.RETRY_ATTEMPTS} attempts with backoff`,
       timeout: `${CONFIG.REQUEST_TIMEOUT}ms per request`,
       adapters: Array.from(AdapterFactory.adapters.keys()),
     },
-  };
+  }
 }
 
 export function getActiveProviders(env) {
-  const active = [];
+  const active = []
 
   for (const [key, config] of Object.entries(CONFIG.PROVIDERS)) {
     if (config.enabled) {
-      const needsAuth = config.requiresAuth;
-      const hasAuth = env[`${key}_API_KEY`];
+      const needsAuth = config.requiresAuth
+      const hasAuth = env[`${key}_API_KEY`]
 
       active.push({
         name: key,
         adapter: config.adapter,
-        status: needsAuth && !hasAuth ? "Limited" : "Active",
+        status: needsAuth && !hasAuth ? 'Limited' : 'Active',
         priority: config.priority,
         requiresAuth: needsAuth,
-        authConfigured: needsAuth ? hasAuth : "N/A",
+        authConfigured: needsAuth ? hasAuth : 'N/A',
         rateLimit: `${config.rateLimit.requests} req/${
           config.rateLimit.window / 1000
         }s`,
-      });
+      })
     }
   }
 
   return {
     count: active.length,
     providers: active.sort((a, b) => a.priority - b.priority),
-  };
+  }
 }
