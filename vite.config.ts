@@ -12,34 +12,14 @@ export default defineConfig({
       '@styles': path.resolve(__dirname, './styles'),
     },
   },
-  // IMPORTANT: GitHub Pages base path
-  // Your repo: https://github.com/Shapehaven-Innovations/BridgeFinder
-  // Deployed at: https://shapehaven-innovations.github.io/BridgeFinder/
-  base: '/BridgeFinder/',
-
   server: {
     port: 3000,
     proxy: {
       '/api': {
         target: 'http://localhost:8787',
         changeOrigin: true,
+        secure: false,
       },
-    },
-  },
-  build: {
-    outDir: 'dist',
-    sourcemap: true,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-        },
-      },
-    },
-  },
-  css: {
-    modules: {
-      localsConvention: 'camelCase',
     },
   },
 })
