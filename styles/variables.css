@@ -94,9 +94,14 @@
 
   /* Z-index Scale */
   --z-dropdown: 1000;
-  --z-modal: 1100;
-  --z-toast: 1200;
-  --z-tooltip: 1300;
+  --z-base: 1;
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
 
   /* Layout */
   --max-width-container: 1280px;

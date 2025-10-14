@@ -1,6 +1,8 @@
+// components/Header/Header.tsx
 import React, { useState } from 'react'
 import { Button } from '../Button/Button'
 import { Modal } from '../Modal/Modal'
+import { ThemeToggle } from '../ThemeToggle/ThemeToggle'
 import styles from './Header.module.css'
 
 export const Header: React.FC = () => {
@@ -35,6 +37,7 @@ export const Header: React.FC = () => {
             >
               Settings
             </Button>
+            <ThemeToggle />
           </nav>
         </div>
       </header>
