@@ -1,0 +1,450 @@
+/* components/Badge/Badge.module.css */
+/* ===== BADGE STYLES ===== */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-weight: var(--font-weight-semibold);
+  border-radius: var(--border-radius);
+  transition: all var(--transition-base);
+}
+
+/* Sizes */
+.sm {
+  padding: var(--space-2xs) var(--space-xs);
+  font-size: var(--font-size-xs);
+}
+
+.md {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+}
+
+.lg {
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-base);
+}
+
+/* Pill Shape */
+.pill {
+  border-radius: var(--border-radius-full);
+}
+
+/* Variants */
+.primary {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-primary);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.success {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-accent-green);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--color-accent-orange);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-accent-red);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.info {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-primary);
+}
+
+.purple {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+/* Icon */
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1em;
+}
+
+.text {
+  line-height: 1;
+}
+
+/* components/Tooltip/Tooltip.module.css */
+/* ===== TOOLTIP STYLES ===== */
+
+.wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: var(--z-tooltip);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--color-border-primary);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Positions */
+.top {
+  bottom: calc(100% + var(--space-xs));
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.top::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--color-bg-card);
+}
+
+.bottom {
+  top: calc(100% + var(--space-xs));
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.bottom::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: var(--color-bg-card);
+}
+
+.left {
+  right: calc(100% + var(--space-xs));
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.left::after {
+  content: '';
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 6px solid transparent;
+  border-left-color: var(--color-bg-card);
+}
+
+.right {
+  left: calc(100% + var(--space-xs));
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.right::after {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 6px solid transparent;
+  border-right-color: var(--color-bg-card);
+}
+
+/* components/Spinner/Spinner.module.css */
+/* ===== SPINNER STYLES ===== */
+
+.spinner {
+  display: inline-block;
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Sizes */
+.sm {
+  width: 16px;
+  height: 16px;
+}
+
+.md {
+  width: 24px;
+  height: 24px;
+}
+
+.lg {
+  width: 40px;
+  height: 40px;
+}
+
+.svg {
+  width: 100%;
+  height: 100%;
+}
+
+.circle {
+  stroke: var(--color-primary);
+  stroke-linecap: round;
+  stroke-dasharray: 90, 150;
+  stroke-dashoffset: 0;
+  animation: dash 1.5s ease-in-out infinite;
+}
+
+@keyframes dash {
+  0% {
+    stroke-dasharray: 1, 150;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -35;
+  }
+  100% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -124;
+  }
+}
+
+/* components/EmptyState/EmptyState.module.css */
+/* ===== EMPTY STATE STYLES ===== */
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3xl) var(--space-xl);
+  text-align: center;
+  background: var(--color-bg-secondary);
+  border-radius: var(--border-radius-xl);
+  border: 2px dashed var(--color-border-primary);
+  min-height: 400px;
+}
+
+.emptyIcon {
+  font-size: 4rem;
+  margin-bottom: var(--space-lg);
+  opacity: 0.5;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.emptyTitle {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-md) 0;
+}
+
+.emptyDescription {
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-xl) 0;
+  max-width: 500px;
+  line-height: var(--line-height-relaxed);
+}
+
+.emptyAction {
+  margin-top: var(--space-lg);
+}
+
+/* components/Divider/Divider.module.css */
+/* ===== DIVIDER STYLES ===== */
+
+.divider {
+  height: 1px;
+  background: var(--color-border-primary);
+  border: none;
+  margin: var(--space-lg) 0;
+}
+
+.divider.thick {
+  height: 2px;
+}
+
+.divider.dashed {
+  background: none;
+  border-top: 2px dashed var(--color-border-primary);
+}
+
+.divider.gradient {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-border-primary),
+    transparent
+  );
+}
+
+.dividerWithText {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin: var(--space-lg) 0;
+}
+
+.dividerWithText::before,
+.dividerWithText::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-primary);
+}
+
+.dividerText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* components/ProgressBar/ProgressBar.module.css */
+/* ===== PROGRESS BAR STYLES ===== */
+
+.progressContainer {
+  width: 100%;
+  height: 8px;
+  background: var(--color-bg-tertiary);
+  border-radius: var(--border-radius-full);
+  overflow: hidden;
+  position: relative;
+}
+
+.progressBar {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--color-primary) 0%,
+    var(--color-primary-light) 100%
+  );
+  border-radius: var(--border-radius-full);
+  transition: width var(--transition-smooth);
+  position: relative;
+  overflow: hidden;
+}
+
+.progressBar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+.progressLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.progressPercentage {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== SKELETON LOADER STYLES ===== */
+/* Additional skeleton utilities */
+
+.skeleton {
+  background: var(--color-bg-tertiary);
+  border-radius: var(--border-radius);
+  animation: pulse 2s ease-in-out infinite;
+  overflow: hidden;
+  position: relative;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.08),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+[data-theme='light'] .skeleton::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 0, 0, 0.04),
+    transparent
+  );
+}
+
+.skeletonText {
+  height: 16px;
+  width: 100%;
+  margin-bottom: var(--space-sm);
+}
+
+.skeletonTitle {
+  height: 24px;
+  width: 60%;
+  margin-bottom: var(--space-md);
+}
+
+.skeletonCircle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.skeletonButton {
+  height: 44px;
+  width: 120px;
+  border-radius: var(--border-radius-lg);
+}

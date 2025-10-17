@@ -1,3 +1,4 @@
+// src/pages/HomePage.tsx
 import { useState } from 'react'
 import { Header } from '@components/Header'
 import { Modal } from '@components/Modal'
@@ -10,7 +11,7 @@ import { ProtocolFilter } from '@/features/bridge-comparison/components/Protocol
 import { useBridgeComparison } from '@/features/bridge-comparison/hooks/useBridgeComparison'
 import { useProtocolFilter } from '@/features/bridge-comparison/hooks/useProtocolFilter'
 import { useSortResults } from '@/features/bridge-comparison/hooks/useSortResults'
-import { getSlippage, setSlippage } from '@/lib/storage'
+import { getSlippage, setSlippage as saveSlippage } from '@/lib/storage'
 import { getRelativeTime } from '@/lib/dates'
 import type { ComparisonParams } from '@/api/types'
 import type {
@@ -20,15 +21,18 @@ import type {
 import styles from './HomePage.module.css'
 
 export function HomePage() {
+  const { success, error, toasts, removeToast } = useToast()
   const [showSettings, setShowSettings] = useState(false)
-  const [slippageInput, setSlippageInput] = useState(getSlippage())
-  const { toasts, removeToast, success } = useToast()
+  const [localSlippage, setLocalSlippage] = useState(() => {
+    const slippage = getSlippage()
+    return slippage < 1 ? slippage * 100 : slippage
+  })
 
   const {
     result,
     isLoading,
     isError,
-    error: apiError,
+    error: comparisonError,
     compare,
   } = useBridgeComparison()
 
@@ -39,29 +43,31 @@ export function HomePage() {
     protocolOptions,
     showUnavailable,
     toggleProtocol,
-    selectAll,
-    clearAll,
+    selectAll: selectAllProtocols,
+    clearAll: clearAllProtocols,
     toggleShowUnavailable,
   } = useProtocolFilter(bridges)
 
   const { sortedBridges, sortField, sortOrder, setSorting, toggleSortOrder } =
     useSortResults(filteredBridges)
 
-  const handleCompare = (params: ComparisonParams) => {
-    compare(params)
+  const handleCompare = async (params: ComparisonParams) => {
+    try {
+      compare(params)
+    } catch (err) {
+      error('Failed to compare bridge routes. Please try again.')
+    }
   }
 
   const handleSaveSettings = () => {
-    setSlippage(slippageInput)
+    const slippageValue =
+      localSlippage > 1 ? localSlippage / 100 : localSlippage
+    saveSlippage(slippageValue)
     setShowSettings(false)
-    success('Settings saved successfully')
+    success('Settings saved successfully!')
   }
 
-  const handleBridgeSelect = (bridge: BridgeWithPosition) => {
-    window.open(bridge.url, '_blank', 'noopener,noreferrer')
-  }
-
-  const handleSortChange = (field: SortField) => {
+  const handleSort = (field: SortField) => {
     if (field === sortField) {
       toggleSortOrder()
     } else {
@@ -72,7 +78,7 @@ export function HomePage() {
   return (
     <>
       <div className={styles.page}>
-        <Header onSettingsOpen={() => setShowSettings(true)} />
+        <Header />
 
         <main className={styles.main}>
           <div className={styles.container}>
@@ -80,97 +86,82 @@ export function HomePage() {
               <BridgeForm onSubmit={handleCompare} isLoading={isLoading} />
             </section>
 
-            {isError && apiError && (
+            {isError && comparisonError && (
               <div className={styles.errorBanner}>
                 <span className={styles.errorIcon}>⚠️</span>
                 <div className={styles.errorContent}>
                   <h3 className={styles.errorTitle}>Comparison Failed</h3>
                   <p className={styles.errorMessage}>
-                    {apiError.message || 'Unable to compare bridge routes'}
+                    {comparisonError.message || 'Unable to fetch bridge routes'}
                   </p>
-                  {apiError.details && (
-                    <p className={styles.errorDetails}>{apiError.details}</p>
+                  {comparisonError.details && (
+                    <p className={styles.errorDetails}>
+                      {comparisonError.details}
+                    </p>
                   )}
                 </div>
               </div>
             )}
 
             {result && (
-              <>
-                <section className={styles.resultsHeader}>
+              <section className={styles.statsSection}>
+                <StatsGrid summary={result.summary} />
+              </section>
+            )}
+
+            {result && result.bridges.length > 0 && (
+              <section className={styles.filterSection}>
+                <ProtocolFilter
+                  protocols={protocolOptions}
+                  onToggle={toggleProtocol}
+                  onSelectAll={selectAllProtocols}
+                  onClearAll={clearAllProtocols}
+                  showUnavailable={showUnavailable}
+                  onToggleShowUnavailable={toggleShowUnavailable}
+                />
+              </section>
+            )}
+
+            {result && (
+              <section className={styles.resultsSection}>
+                <div className={styles.resultsHeader}>
                   <div className={styles.resultsTitle}>
-                    <h2>Comparison Results</h2>
-                    <span className={styles.timestamp}>
+                    <h2>Bridge Routes</h2>
+                    <p className={styles.timestamp}>
                       Updated {getRelativeTime(result.timestamp)}
-                    </span>
+                    </p>
                   </div>
                   <div className={styles.sortControls}>
                     <span className={styles.sortLabel}>Sort by:</span>
-                    <Button
-                      variant={sortField === 'cost' ? 'primary' : 'outline'}
-                      size="sm"
-                      onClick={() => handleSortChange('cost')}
-                    >
-                      Cost{' '}
-                      {sortField === 'cost' &&
-                        (sortOrder === 'asc' ? '↑' : '↓')}
-                    </Button>
-                    <Button
-                      variant={sortField === 'time' ? 'primary' : 'outline'}
-                      size="sm"
-                      onClick={() => handleSortChange('time')}
-                    >
-                      Time{' '}
-                      {sortField === 'time' &&
-                        (sortOrder === 'asc' ? '↑' : '↓')}
-                    </Button>
-                    <Button
-                      variant={sortField === 'security' ? 'primary' : 'outline'}
-                      size="sm"
-                      onClick={() => handleSortChange('security')}
-                    >
-                      Security{' '}
-                      {sortField === 'security' &&
-                        (sortOrder === 'asc' ? '↑' : '↓')}
-                    </Button>
+                    {(['cost', 'time', 'security'] as SortField[]).map(
+                      (field) => (
+                        <Button
+                          key={field}
+                          variant={sortField === field ? 'primary' : 'ghost'}
+                          size="sm"
+                          onClick={() => handleSort(field)}
+                        >
+                          {field.charAt(0).toUpperCase() + field.slice(1)}
+                          {sortField === field &&
+                            (sortOrder === 'asc' ? ' ↑' : ' ↓')}
+                        </Button>
+                      )
+                    )}
                   </div>
-                </section>
-
-                <section className={styles.statsSection}>
-                  <StatsGrid summary={result.summary} />
-                </section>
-
-                {protocolOptions.length > 0 && (
-                  <section className={styles.filterSection}>
-                    <ProtocolFilter
-                      protocols={protocolOptions}
-                      onToggle={toggleProtocol}
-                      onSelectAll={selectAll}
-                      onClearAll={clearAll}
-                      showUnavailable={showUnavailable}
-                      onToggleShowUnavailable={toggleShowUnavailable}
-                    />
-                  </section>
-                )}
-
-                <section className={styles.resultsSection}>
-                  <BridgeList
-                    bridges={sortedBridges}
-                    onBridgeSelect={handleBridgeSelect}
-                  />
-                </section>
-              </>
+                </div>
+                <BridgeList bridges={sortedBridges} />
+              </section>
             )}
 
-            {!result && !isLoading && (
+            {!isLoading && !result && (
               <div className={styles.placeholder}>
                 <div className={styles.placeholderIcon}>🌉</div>
                 <h2 className={styles.placeholderTitle}>
-                  Ready to Find the Best Bridge?
+                  Ready to Find Your Perfect Bridge?
                 </h2>
                 <p className={styles.placeholderText}>
-                  Select your chains and token above to compare routes across
-                  multiple bridge providers and find the best deal.
+                  Enter your transfer details above to compare bridge routes and
+                  find the best rates across multiple providers.
                 </p>
               </div>
             )}
@@ -184,24 +175,29 @@ export function HomePage() {
         title="Settings"
         size="md"
       >
-        <div className={styles.settings}>
+        <div className={styles.settingsContent}>
           <div className={styles.settingGroup}>
             <label htmlFor="slippage" className={styles.settingLabel}>
-              Slippage Tolerance (%)
+              Max Slippage Tolerance
             </label>
-            <input
-              id="slippage"
-              type="number"
-              min="0.1"
-              max="50"
-              step="0.1"
-              value={slippageInput}
-              onChange={(e) => setSlippageInput(e.target.value)}
-              className={styles.settingInput}
-            />
-            <p className={styles.settingHint}>
-              Lower values reduce slippage risk but may cause transactions to
-              fail.
+            <div className={styles.slippageInput}>
+              <input
+                id="slippage"
+                type="number"
+                min="0.1"
+                max="50"
+                step="0.1"
+                value={localSlippage}
+                onChange={(e) =>
+                  setLocalSlippage(parseFloat(e.target.value) || 0)
+                }
+                className={styles.input}
+              />
+              <span className={styles.slippagePercent}>%</span>
+            </div>
+            <p className={styles.settingHelp}>
+              Your transaction will revert if the price changes unfavorably by
+              more than this percentage.
             </p>
           </div>
 

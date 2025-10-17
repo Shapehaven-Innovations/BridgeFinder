@@ -20,19 +20,12 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    /* Path resolution */
+    /* Path Mapping */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@components/*": ["./components/*"],
-      "@types/*": ["./types/*"],
-      "@styles/*": ["./styles/*"]
-    },
-
-    /* Type definitions */
-    "types": ["vite/client", "node"]
+      "@/*": ["./src/*"]
+    }
   },
-  "include": ["src", "components", "types", "test"],
-  "exclude": ["node_modules", "dist", "worker"],
+  "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

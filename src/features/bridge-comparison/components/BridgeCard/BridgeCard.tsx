@@ -1,119 +1,100 @@
+// src/features/bridge-comparison/components/BridgeCard/BridgeCard.tsx
 import React from 'react'
-import { Card } from '@components/Card'
-import { Button } from '@components/Button'
-import type { BridgeWithPosition } from '../../types'
+import { Button } from '@components/Button/Button'
 import styles from './BridgeCard.module.css'
 
 interface BridgeCardProps {
-  bridge: BridgeWithPosition
+  bridge: {
+    name: string
+    protocol: string
+    totalCost: number
+    bridgeFee: number
+    gasFee: number
+    time: string
+    security: string
+    liquidity: string
+    route: string
+    isBestDeal?: boolean
+    position?: number
+    savings?: number
+  }
 }
 
 export const BridgeCard: React.FC<BridgeCardProps> = ({ bridge }) => {
-  if (bridge.unavailable) {
-    return (
-      <Card variant="default" padding="md" className={styles.cardUnavailable}>
-        <div className={styles.header}>
-          <div className={styles.titleSection}>
-            <div>
-              <h3 className={styles.name}>{bridge.name}</h3>
-              <p className={styles.provider}>{bridge.provider}</p>
-            </div>
-          </div>
-          <div className={styles.badges}>
-            <span className={styles.unavailableBadge}>Unavailable</span>
-          </div>
-        </div>
-        <div className={styles.unavailableContent}>
-          <p className={styles.unavailableReason}>
-            {bridge.unavailableReason || 'No route available'}
-          </p>
-          {bridge.unavailableDetails && (
-            <p className={styles.unavailableDetails}>
-              {bridge.unavailableDetails}
-            </p>
-          )}
-        </div>
-      </Card>
-    )
-  }
-
-  const cardClass = bridge.isBest ? styles.cardBest : styles.card
+  const {
+    name,
+    protocol,
+    totalCost,
+    bridgeFee,
+    gasFee,
+    time,
+    security,
+    liquidity,
+    route,
+    isBestDeal,
+    position,
+    savings,
+  } = bridge
 
   return (
-    <Card variant="elevated" padding="md" className={cardClass}>
+    <div className={`${styles.card} ${isBestDeal ? styles.bestDeal : ''}`}>
+      {isBestDeal && (
+        <div className={styles.bestBadge}>
+          <span className={styles.badgeIcon}>🏆</span>
+          <span>Best Deal</span>
+        </div>
+      )}
+
       <div className={styles.header}>
-        <div className={styles.titleSection}>
-          <div>
-            <h3 className={styles.name}>{bridge.name}</h3>
-            <p className={styles.provider}>{bridge.provider}</p>
-          </div>
+        <div>
+          <h3 className={styles.name}>{name}</h3>
+          <span className={styles.protocol}>{protocol}</span>
         </div>
-        <div className={styles.badges}>
-          {bridge.isBest && <span className={styles.bestBadge}>Best Deal</span>}
-          <span className={styles.position}>#{bridge.position}</span>
-        </div>
+        {position && <div className={styles.position}>#{position}</div>}
       </div>
 
-      <div className={styles.metrics}>
-        <div className={styles.metricRow}>
+      <div className={styles.costSection}>
+        <div className={styles.totalCost}>
           <span className={styles.label}>Total Cost</span>
-          <span className={styles.valuePrimary}>
-            ${bridge.totalCost.toFixed(2)}
-          </span>
+          <span className={styles.amount}>${totalCost.toFixed(2)}</span>
         </div>
-        <div className={styles.metricRow}>
-          <span className={styles.label}>Bridge Fee</span>
-          <span className={styles.value}>${bridge.bridgeFee.toFixed(2)}</span>
-        </div>
-        <div className={styles.metricRow}>
-          <span className={styles.label}>Gas Fee</span>
-          <span className={styles.value}>
-            ${bridge.gasFee ? bridge.gasFee.toFixed(2) : 'N/A'}
-          </span>
-        </div>
-        {bridge.savings && bridge.savings > 0 && (
-          <div className={styles.savings}>
-            Save ${bridge.savings.toFixed(2)} vs highest
-          </div>
+        {savings !== undefined && savings > 0 && (
+          <div className={styles.savings}>Save ${savings.toFixed(2)}</div>
         )}
       </div>
 
       <div className={styles.details}>
-        <div className={styles.detailItem}>
-          <span className={styles.detailLabel}>Time</span>
-          <span className={styles.detailValue}>{bridge.estimatedTime}</span>
+        <div className={styles.detailRow}>
+          <span className={styles.detailLabel}>Bridge Fee:</span>
+          <span className={styles.detailValue}>${bridgeFee.toFixed(4)}</span>
         </div>
-        <div className={styles.detailItem}>
-          <span className={styles.detailLabel}>Security</span>
-          <span className={styles.detailValue}>{bridge.security}</span>
+        <div className={styles.detailRow}>
+          <span className={styles.detailLabel}>Gas Fee:</span>
+          <span className={styles.detailValue}>${gasFee.toFixed(4)}</span>
         </div>
-        <div className={styles.detailItem}>
-          <span className={styles.detailLabel}>Liquidity</span>
-          <span className={styles.detailValue}>{bridge.liquidity}</span>
+        <div className={styles.detailRow}>
+          <span className={styles.detailLabel}>Time:</span>
+          <span className={styles.detailValue}>{time}</span>
         </div>
-      </div>
-
-      <div className={styles.footer}>
-        <div className={styles.route}>
-          <span className={styles.routeLabel}>Route</span>
-          <span className={styles.routeValue}>{bridge.route}</span>
+        <div className={styles.detailRow}>
+          <span className={styles.detailLabel}>Security:</span>
+          <span className={styles.detailValue}>{security}</span>
         </div>
-        <div className={styles.protocol}>
-          <span className={styles.protocolBadge}>{bridge.protocol}</span>
+        <div className={styles.detailRow}>
+          <span className={styles.detailLabel}>Liquidity:</span>
+          <span className={styles.detailValue}>{liquidity}</span>
+        </div>
+        <div className={styles.detailRow}>
+          <span className={styles.detailLabel}>Route:</span>
+          <span className={styles.detailValue}>{route}</span>
         </div>
       </div>
 
       <div className={styles.actions}>
-        {bridge.url && (
-          <Button
-            variant="primary"
-            size="md"
-            onClick={() => window.open(bridge.url as string, '_blank')}
-          >
-            Bridge Now →
-          </Button>
-        )}
+        <Button variant="primary" fullWidth>
+          Use {name}
+        </Button>
       </div>
-    </Card>
+    </div>
   )
 }

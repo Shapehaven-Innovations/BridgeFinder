@@ -7,19 +7,21 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@components': path.resolve(__dirname, './components'),
-      '@types': path.resolve(__dirname, './types'),
+      '@components': path.resolve(__dirname, './src/components'),
+      '@features': path.resolve(__dirname, './src/features'),
+      '@lib': path.resolve(__dirname, './src/lib'),
+      '@api': path.resolve(__dirname, './src/api'),
+      '@hooks': path.resolve(__dirname, './src/hooks'),
+      '@utils': path.resolve(__dirname, './src/utils'),
       '@styles': path.resolve(__dirname, './styles'),
     },
   },
   server: {
     port: 3000,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8787',
-        changeOrigin: true,
-        secure: false,
-      },
-    },
+    open: true,
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: true,
   },
 })
