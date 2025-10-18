@@ -1,7 +1,12 @@
+/* src/features/bridge-comparison/components/StatsGrid/StatsGrid.module.css */
+.container {
+  padding: var(--space-xl);
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--space-md);
+  gap: var(--space-xl);
 }
 
 .stat {
@@ -14,6 +19,8 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .value {
@@ -23,19 +30,11 @@
   display: flex;
   align-items: baseline;
   gap: var(--space-sm);
+  font-variant-numeric: tabular-nums;
 }
 
-.success {
-  color: var(--color-success);
-}
-
-.error {
-  color: var(--color-error);
-}
-
-.warning {
-  color: var(--color-warning);
-}
+/* Removed all color-coding classes (success, error, warning) */
+/* All values now use the default text color for consistency */
 
 .percent {
   font-size: var(--font-size-sm);
@@ -53,5 +52,11 @@
 @media (max-width: 640px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .stat {
+    padding: var(--space-md);
+    background-color: var(--color-bg-secondary);
+    border-radius: var(--border-radius-lg);
   }
 }

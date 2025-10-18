@@ -1,9 +1,9 @@
 // src/pages/HomePage.tsx
 import { useState } from 'react'
-import { Header } from '@components/Header'
-import { Modal } from '@components/Modal'
-import { Button } from '@components/Button'
-import { ToastContainer, useToast } from '@components/Toast'
+import { Header } from '../components/Header'
+import { Modal } from '../components/Modal'
+import { Button } from '../components/Button'
+import { ToastContainer, useToast } from '../components/Toast'
 import { BridgeForm } from '@/features/bridge-comparison/components/BridgeForm'
 import { BridgeList } from '@/features/bridge-comparison/components/BridgeList'
 import { StatsGrid } from '@/features/bridge-comparison/components/StatsGrid'
@@ -14,10 +14,7 @@ import { useSortResults } from '@/features/bridge-comparison/hooks/useSortResult
 import { getSlippage, setSlippage as saveSlippage } from '@/lib/storage'
 import { getRelativeTime } from '@/lib/dates'
 import type { ComparisonParams } from '@/api/types'
-import type {
-  BridgeWithPosition,
-  SortField,
-} from '@/features/bridge-comparison/types'
+import type { SortField } from '@/features/bridge-comparison/types'
 import styles from './HomePage.module.css'
 
 export function HomePage() {
@@ -25,7 +22,8 @@ export function HomePage() {
   const [showSettings, setShowSettings] = useState(false)
   const [localSlippage, setLocalSlippage] = useState(() => {
     const slippage = getSlippage()
-    return slippage < 1 ? slippage * 100 : slippage
+    const numericSlippage = Number(slippage)
+    return numericSlippage < 1 ? numericSlippage * 100 : numericSlippage
   })
 
   const {
@@ -62,7 +60,7 @@ export function HomePage() {
   const handleSaveSettings = () => {
     const slippageValue =
       localSlippage > 1 ? localSlippage / 100 : localSlippage
-    saveSlippage(slippageValue)
+    saveSlippage(String(slippageValue))
     setShowSettings(false)
     success('Settings saved successfully!')
   }
@@ -82,10 +80,12 @@ export function HomePage() {
 
         <main className={styles.main}>
           <div className={styles.container}>
+            {/* Form Section */}
             <section className={styles.formSection}>
               <BridgeForm onSubmit={handleCompare} isLoading={isLoading} />
             </section>
 
+            {/* Error Banner */}
             {isError && comparisonError && (
               <div className={styles.errorBanner}>
                 <span className={styles.errorIcon}>⚠️</span>
@@ -103,12 +103,21 @@ export function HomePage() {
               </div>
             )}
 
-            {result && (
+            {/* Stats Grid - WITH DEFENSIVE CHECK */}
+            {result && result.summary && (
               <section className={styles.statsSection}>
-                <StatsGrid summary={result.summary} />
+                <StatsGrid
+                  summary={{
+                    ...result.summary,
+                    availableRoutes: Array.isArray(result.bridges)
+                      ? result.bridges.length
+                      : 0,
+                  }}
+                />
               </section>
             )}
 
+            {/* Protocol Filter */}
             {result && result.bridges.length > 0 && (
               <section className={styles.filterSection}>
                 <ProtocolFilter
@@ -122,6 +131,7 @@ export function HomePage() {
               </section>
             )}
 
+            {/* Results Section */}
             {result && (
               <section className={styles.resultsSection}>
                 <div className={styles.resultsHeader}>
@@ -142,33 +152,45 @@ export function HomePage() {
                           onClick={() => handleSort(field)}
                         >
                           {field.charAt(0).toUpperCase() + field.slice(1)}
-                          {sortField === field &&
-                            (sortOrder === 'asc' ? ' ↑' : ' ↓')}
+                          {sortField === field && (
+                            <span className={styles.sortIcon}>
+                              {sortOrder === 'asc' ? '↑' : '↓'}
+                            </span>
+                          )}
                         </Button>
                       )
                     )}
                   </div>
                 </div>
+
                 <BridgeList bridges={sortedBridges} />
               </section>
             )}
 
-            {!isLoading && !result && (
-              <div className={styles.placeholder}>
-                <div className={styles.placeholderIcon}>🌉</div>
-                <h2 className={styles.placeholderTitle}>
-                  Ready to Find Your Perfect Bridge?
-                </h2>
-                <p className={styles.placeholderText}>
-                  Enter your transfer details above to compare bridge routes and
-                  find the best rates across multiple providers.
-                </p>
-              </div>
+            {/* Empty State */}
+            {!isLoading && result && sortedBridges.length === 0 && (
+              <section className={styles.section}>
+                <div className={styles.emptyState}>
+                  <div className={styles.emptyIcon}>🌉</div>
+                  <h3 className={styles.emptyTitle}>No routes found</h3>
+                  <p className={styles.emptyText}>
+                    Try adjusting your filters or selecting different chains to
+                    find available bridge routes.
+                  </p>
+                  <Button
+                    variant="primary"
+                    onClick={() => selectAllProtocols()}
+                  >
+                    Reset Filters
+                  </Button>
+                </div>
+              </section>
             )}
           </div>
         </main>
       </div>
 
+      {/* Settings Modal */}
       <Modal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
@@ -177,28 +199,22 @@ export function HomePage() {
       >
         <div className={styles.settingsContent}>
           <div className={styles.settingGroup}>
-            <label htmlFor="slippage" className={styles.settingLabel}>
-              Max Slippage Tolerance
-            </label>
-            <div className={styles.slippageInput}>
+            <h4 className={styles.settingSubtitle}>Slippage Tolerance</h4>
+            <p className={styles.settingText}>
+              Set your maximum acceptable slippage percentage
+            </p>
+            <div className={styles.slippageControl}>
               <input
-                id="slippage"
-                type="number"
+                type="range"
                 min="0.1"
-                max="50"
+                max="5"
                 step="0.1"
                 value={localSlippage}
-                onChange={(e) =>
-                  setLocalSlippage(parseFloat(e.target.value) || 0)
-                }
-                className={styles.input}
+                onChange={(e) => setLocalSlippage(Number(e.target.value))}
+                className={styles.slippageSlider}
               />
-              <span className={styles.slippagePercent}>%</span>
+              <span className={styles.slippageValue}>{localSlippage}%</span>
             </div>
-            <p className={styles.settingHelp}>
-              Your transaction will revert if the price changes unfavorably by
-              more than this percentage.
-            </p>
           </div>
 
           <div className={styles.settingGroup}>

@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '' // Empty string for dev (uses proxy)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '' // Empty string uses proxy
 
 export class ApiError extends Error {
   constructor(
