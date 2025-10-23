@@ -21,20 +21,16 @@ export const queryKeys = {
 // Bridge comparison query
 export function useBridgeComparison(
   params: ComparisonParams,
-  options?: Omit
-    UseQueryOptions<ComparisonResponse>,
-    'queryKey' | 'queryFn'
-  >
+  options?: Omit<UseQueryOptions<ComparisonResponse>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
     queryKey: queryKeys.comparison(params),
-    queryFn: () =>
-      apiClient.post<ComparisonResponse>('/api/compare', params),
+    queryFn: () => apiClient.post<ComparisonResponse>('/api/compare', params),
     enabled: Boolean(
       params.fromChainId &&
         params.toChainId &&
         params.token &&
-        params.amount > 0
+        Number(params.amount) > 0
     ),
     ...options,
   })
@@ -74,7 +70,7 @@ export function useStatus(
 
 // Chains query
 export function useChains(
-  options?: Omit
+  options?: Omit<
     UseQueryOptions<{ chains: Record<string, Chain>; count: number }>,
     'queryKey' | 'queryFn'
   >
@@ -92,7 +88,7 @@ export function useChains(
 
 // Tokens query
 export function useTokens(
-  options?: Omit
+  options?: Omit<
     UseQueryOptions<{ tokens: Record<string, Token>; count: number }>,
     'queryKey' | 'queryFn'
   >
