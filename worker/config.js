@@ -45,7 +45,7 @@ export const CONFIG = {
     RANGO: {
       enabled: true,
       priority: 5,
-      requiresAuth: false, // Public demo key available
+      requiresAuth: true, // Utilizing test API key
       adapter: 'RangoAdapter',
       rateLimit: { requests: 60, window: 60000 },
     },
@@ -122,7 +122,7 @@ export const CHAINS = {
 
 export const TOKENS = {
   ETH: {
-    address: {
+    addresses: {
       1: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
       137: '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619',
       42161: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
@@ -135,7 +135,7 @@ export const TOKENS = {
     symbol: 'ETH',
   },
   USDC: {
-    address: {
+    addresses: {
       1: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
       137: '0x2791bca1f2de4661ed88a30c99a7a9449aa84174',
       42161: '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8',
@@ -148,7 +148,7 @@ export const TOKENS = {
     symbol: 'USDC',
   },
   USDT: {
-    address: {
+    addresses: {
       1: '0xdac17f958d2ee523a2206206994597c13d831ec7',
       137: '0xc2132d05d31c914a87c6611c10748aeb04b58e8f',
       56: '0x55d398326f99059ff775485246999027b3197955',
@@ -161,7 +161,7 @@ export const TOKENS = {
     symbol: 'USDT',
   },
   DAI: {
-    address: {
+    addresses: {
       1: '0x6b175474e89094c44da98b954eedeac495271d0f',
       137: '0x8f3cf7ad23cd3cadbd9735aff958023239c6a063',
       42161: '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1',
@@ -174,7 +174,7 @@ export const TOKENS = {
     symbol: 'DAI',
   },
   WETH: {
-    address: {
+    addresses: {
       1: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
       137: '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619',
       42161: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
@@ -187,7 +187,7 @@ export const TOKENS = {
     symbol: 'WETH',
   },
   WBTC: {
-    address: {
+    addresses: {
       1: '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599',
       137: '0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6',
       42161: '0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f',

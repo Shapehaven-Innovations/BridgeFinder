@@ -1,113 +1,115 @@
 // worker/adapters/squid.js
-import { BridgeAdapter } from "./base.js";
-import { CONFIG, TOKENS } from "../config.js";
+import { BridgeAdapter } from './base.js'
+import { CONFIG, TOKENS } from '../config.js'
 
 export class SquidAdapter extends BridgeAdapter {
   constructor(config) {
-    super("Squid", config);
-    this.icon = "🦑";
+    super('Squid', config)
+    this.icon = '🦑'
   }
 
   async getQuote(params, env) {
-    await this.checkRateLimit();
+    await this.checkRateLimit()
 
-    const { fromChainId, toChainId, token, amount, sender } = params;
+    const { fromChainId, toChainId, token, amount, sender } = params
 
-    // [DEV-LOG] Request parameters
     console.log(`[${this.name}] API Request:`, {
       fromChainId,
       toChainId,
       token,
       amount,
       sender,
-    }); // REMOVE-FOR-PRODUCTION
+    })
 
-    const tokenCfg = TOKENS[token];
+    const tokenCfg = TOKENS[token]
     if (!tokenCfg) {
-      throw new Error(`${this.name}: Unknown token ${token}`);
+      throw new Error(`${this.name}: Unknown token ${token}`)
     }
 
-    const fromToken = this.getTokenAddress(token, fromChainId);
-    const toToken = this.getTokenAddress(token, toChainId);
+    const fromToken = tokenCfg.addresses?.[fromChainId]
+    const toToken = tokenCfg.addresses?.[toChainId]
 
     if (!fromToken || !toToken) {
-      throw new Error(`${this.name}: Missing token addresses`);
+      throw new Error(`${this.name}: Missing token addresses`)
     }
 
-    const fromAmount = this.toUnits(amount, tokenCfg.decimals);
+    const fromAmount = this.toUnits(amount, tokenCfg.decimals)
 
     const body = {
       fromChain: String(fromChainId),
       toChain: String(toChainId),
-      fromToken,
-      toToken,
-      fromAmount,
+      fromToken: fromToken,
+      toToken: toToken,
+      fromAmount: fromAmount,
       fromAddress: sender,
       toAddress: sender,
-      slippage: parseFloat(CONFIG.DEFAULT_SLIPPAGE),
+      slippage: params.slippage ? parseFloat(params.slippage) : 1.0,
       enableBoost: true,
-    };
+      quoteOnly: false,
+    }
 
-    const url = "https://api.0xsquid.com/v1/route";
+    const url = 'https://apiplus.squidrouter.com/v2/route'
 
-    // [DEV-LOG] API URL and Body
-    console.log(`[${this.name}] Fetching:`, url); // REMOVE-FOR-PRODUCTION
-    console.log(`[${this.name}] Body:`, JSON.stringify(body, null, 2)); // REMOVE-FOR-PRODUCTION
+    console.log(`[${this.name}] Fetching:`, url)
+    console.log(`[${this.name}] Body:`, JSON.stringify(body, null, 2))
 
     const res = await this.fetchWithTimeout(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "x-integrator-id": env?.INTEGRATOR_NAME || "bridge-aggregator",
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'x-integrator-id': 'bridge-aggregator-api',
       },
       body: JSON.stringify(body),
-    });
+    })
 
-    // [DEV-LOG] HTTP Response Status
-    console.log(`[${this.name}] HTTP Status:`, res.status); // REMOVE-FOR-PRODUCTION
+    console.log(`[${this.name}] HTTP Status:`, res.status)
 
     if (!res.ok) {
-      const errorBody = await res.text().catch(() => "No details");
-      // [DEV-LOG] Error Response
-      console.error(`[${this.name}] API Error:`, errorBody); // REMOVE-FOR-PRODUCTION
+      const errorBody = await res.text().catch(() => 'No details')
+      console.error(`[${this.name}] API Error:`, errorBody)
       throw new Error(
         `${this.name}: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
-      );
+      )
     }
 
-    const data = await res.json();
+    const data = await res.json()
+    console.log(`[${this.name}] API Response:`, JSON.stringify(data, null, 2))
 
-    // [DEV-LOG] Full API Response
-    console.log(`[${this.name}] API Response:`, JSON.stringify(data, null, 2)); // REMOVE-FOR-PRODUCTION
-
-    if (!data.route) {
-      throw new Error(`${this.name}: No route found`);
+    if (!data || !data.route || !data.route.estimate) {
+      throw new Error(`${this.name}: Invalid response - missing route data`)
     }
 
-    return this.mapToStandardFormat(data.route);
+    return this.mapToStandardFormat(data)
   }
 
-  mapToStandardFormat(route) {
-    const parseUSD = (value) => {
-      const num = parseFloat(value || "0");
-      return isNaN(num) ? 0 : num;
-    };
+  mapToStandardFormat(apiResponse) {
+    const route = apiResponse.route
 
-    const gasCostUSD = parseUSD(route.estimate.gasCosts?.amount) / 1e6;
-    const feeCostUSD = parseUSD(route.estimate.feeCosts?.[0]?.amountUSD);
+    const parseUSD = (value) => {
+      const num = parseFloat(value || '0')
+      return isNaN(num) ? 0 : num
+    }
+
+    const gasCostUSD = parseUSD(route.estimate.gasCosts?.[0]?.amountUSD) || 0
+    const feeCosts = route.estimate.feeCosts || []
+    const feeCostUSD = feeCosts.reduce(
+      (sum, fee) => sum + parseUSD(fee.amountUSD),
+      0
+    )
 
     return this.formatResponse({
       totalCost: gasCostUSD + feeCostUSD,
       bridgeFee: feeCostUSD,
       gasFee: gasCostUSD,
       estimatedTime: `${Math.ceil(route.estimate.estimatedRouteDuration / 60)} mins`,
-      route: "Squid Router",
-      protocol: "Axelar",
+      route: 'Squid Router',
+      protocol: 'Axelar',
       outputAmount: route.estimate.toAmount,
       meta: {
-        tool: "squid",
+        tool: 'squid',
         estimatedRouteDuration: route.estimate.estimatedRouteDuration,
       },
-    });
+    })
   }
 }

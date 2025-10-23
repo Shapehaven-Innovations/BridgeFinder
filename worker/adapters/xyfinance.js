@@ -1,147 +1,111 @@
-// worker/adapters/xyfinance.js - REFACTORED with correct API parameters
-import { BridgeAdapter } from "./base.js";
-import { CONFIG, TOKENS } from "../config.js";
+// worker/adapters/xyfinance.js
+import { BridgeAdapter } from './base.js'
+import { CONFIG, TOKENS } from '../config.js'
 
 export class XYFinanceAdapter extends BridgeAdapter {
   constructor(config) {
-    super("XY Finance", config);
-    this.icon = "⚡";
+    super('XY Finance', config)
+    this.icon = '⚡'
   }
 
   async getQuote(params, env) {
-    await this.checkRateLimit();
+    await this.checkRateLimit()
 
-    const { fromChainId, toChainId, token, amount, sender, slippage } = params;
+    const { fromChainId, toChainId, token, amount, sender, slippage } = params
 
-    // [DEV-LOG] Request parameters
     console.log(`[${this.name}] API Request:`, {
       fromChainId,
       toChainId,
       token,
       amount,
       sender,
-    }); // REMOVE-FOR-PRODUCTION
+    })
 
-    const tokenCfg = TOKENS[token];
+    const tokenCfg = TOKENS[token]
     if (!tokenCfg) {
-      throw new Error(`${this.name}: Unknown token ${token}`);
+      throw new Error(`${this.name}: Unknown token ${token}`)
     }
 
-    const fromToken = this.getTokenAddress(token, fromChainId);
-    const toToken = this.getTokenAddress(token, toChainId);
+    const fromToken = tokenCfg.addresses?.[fromChainId]
+    const toToken = tokenCfg.addresses?.[toChainId]
 
     if (!fromToken || !toToken) {
-      throw new Error(`${this.name}: Missing token addresses`);
+      throw new Error(`${this.name}: Missing token addresses`)
     }
 
-    const fromAmount = this.toUnits(amount, tokenCfg.decimals);
+    const fromAmount = this.toUnits(amount, tokenCfg.decimals)
 
-    // FIXED: Use correct parameter names as per XY Finance API spec
     const queryParams = new URLSearchParams({
-      // Source chain parameters
-      srcChainId: String(fromChainId), // Chain ID remains srcChainId
-      fromTokenAddress: fromToken, // FIXED: was srcQuoteTokenAddress
-      amount: fromAmount, // FIXED: was srcQuoteTokenAmount
-
-      // Destination chain parameters
-      destChainId: String(toChainId), // FIXED: was dstChainId
-      toTokenAddress: toToken, // FIXED: was dstQuoteTokenAddress
-
-      // Optional parameters
-      slippage: slippage || CONFIG.DEFAULT_SLIPPAGE,
+      srcChainId: String(fromChainId),
+      fromTokenAddress: fromToken,
+      amount: fromAmount,
+      destChainId: String(toChainId),
+      toTokenAddress: toToken,
+      slippage: slippage || '0.01',
       receiver: sender,
-    });
+    })
 
-    const url = `https://open-api.xy.finance/v1/quote?${queryParams}`;
+    const url = `https://open-api.xy.finance/v1/quote?${queryParams}`
 
-    // [DEV-LOG] API URL
-    console.log(`[${this.name}] Fetching:`, url); // REMOVE-FOR-PRODUCTION
+    console.log(`[${this.name}] Fetching:`, url)
 
     const res = await this.fetchWithTimeout(url, {
-      headers: { Accept: "application/json" },
-    });
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    })
 
-    // [DEV-LOG] HTTP Response Status
-    console.log(`[${this.name}] HTTP Status:`, res.status); // REMOVE-FOR-PRODUCTION
+    console.log(`[${this.name}] HTTP Status:`, res.status)
 
     if (!res.ok) {
-      const errorBody = await res.text().catch(() => "No details");
-      // [DEV-LOG] Error Response
-      console.error(`[${this.name}] API Error:`, errorBody); // REMOVE-FOR-PRODUCTION
+      const errorBody = await res.text().catch(() => 'No details')
+      console.error(`[${this.name}] API Error:`, errorBody)
       throw new Error(
         `${this.name}: HTTP ${res.status} - ${errorBody.substring(0, 200)}`
-      );
+      )
     }
 
-    const data = await res.json();
+    const data = await res.json()
+    console.log(`[${this.name}] API Response:`, JSON.stringify(data, null, 2))
 
-    // [DEV-LOG] Full API Response
-    console.log(`[${this.name}] API Response:`, JSON.stringify(data, null, 2)); // REMOVE-FOR-PRODUCTION
-
-    // XY Finance uses isSuccess field, not success
-    if (!data.isSuccess) {
-      // Handle timeout or failure with descriptive message
-      const errorMsg = data.msg || "No routes found";
-      throw new Error(`${this.name}: ${errorMsg}`);
-    }
-
-    // Check if we have a valid quote
-    if (!data.quote || data.toTokenAmount === "0") {
+    // Check if route is paused or unavailable
+    if (!data.isSuccess || data.success === false) {
       throw new Error(
-        `${this.name}: No viable route available for this bridge path`
-      );
+        `${this.name}: ${data.msg || 'Route unavailable or paused'}`
+      )
     }
 
-    return this.mapToStandardFormat(data, tokenCfg);
+    if (!data.routes || data.routes.length === 0) {
+      throw new Error(`${this.name}: No routes available`)
+    }
+
+    // Use the best route (first one)
+    return this.mapToStandardFormat(data.routes[0], tokenCfg)
   }
 
-  mapToStandardFormat(data, tokenCfg) {
+  mapToStandardFormat(route, tokenCfg) {
     const parseUSD = (value) => {
-      const num = parseFloat(value || "0");
-      return isNaN(num) ? 0 : num;
-    };
+      const num = parseFloat(value || '0')
+      return isNaN(num) ? 0 : num
+    }
 
-    // Parse XY Finance fee structure - xyFee is an object with {amount, symbol}
-    const xyFeeAmount = data.xyFee?.amount ? parseUSD(data.xyFee.amount) : 0;
-    const crossChainFeeAmount = data.crossChainFee?.amount
-      ? parseUSD(data.crossChainFee.amount)
-      : 0;
-
-    // XY Finance doesn't provide gas cost in USD directly
-    // estimatedGas is just the gas limit (e.g., 150000), not the cost
-    // We'll estimate based on typical Polygon gas prices (~30 gwei) and POL price (~$0.24)
-    const gasLimit = parseUSD(data.estimatedGas || 0);
-    const estimatedGasCostUSD = gasLimit > 0 ? gasLimit * 30e-9 * 0.24 : 0;
-
-    const totalCostUSD =
-      xyFeeAmount + crossChainFeeAmount + estimatedGasCostUSD;
-
-    // Convert transfer time from seconds to minutes
-    const estimatedMinutes = Math.ceil(
-      (data.estimatedTransferTime || 180) / 60
-    );
+    const gasCostUSD = parseUSD(route.estimatedGas) / 1e6
+    const bridgeFeeUSD = parseUSD(route.xyFee) / 1e6
 
     return this.formatResponse({
-      totalCost: totalCostUSD,
-      bridgeFee: xyFeeAmount + crossChainFeeAmount,
-      gasFee: estimatedGasCostUSD,
-      estimatedTime: `${estimatedMinutes} mins`,
-      route: "XY Finance Bridge",
-      protocol: "Y Pool",
-      outputAmount: data.toTokenAmount,
+      totalCost: gasCostUSD + bridgeFeeUSD,
+      bridgeFee: bridgeFeeUSD,
+      gasFee: gasCostUSD,
+      estimatedTime: `${Math.ceil((route.estimatedTransferTime || 300) / 60)} mins`,
+      route: route.bridgeName || 'XY Finance',
+      protocol: 'XY Finance',
+      outputAmount: route.toTokenAmount,
       meta: {
-        tool: "xyfinance",
-        isSuccess: data.isSuccess,
-        statusCode: data.statusCode,
-        estimatedTransferTime: data.estimatedTransferTime,
-        transactionCounts: data.transactionCounts,
-        minimumReceived: data.minimumReceived,
-        fromTokenValue: data.fromTokenValue,
-        toTokenValue: data.toTokenValue,
-        xyFee: data.xyFee,
-        crossChainFee: data.crossChainFee,
-        contractAddress: data.contractAddress,
+        tool: 'xyfinance',
+        bridgeName: route.bridgeName,
+        estimatedTransferTime: route.estimatedTransferTime,
       },
-    });
+    })
   }
 }

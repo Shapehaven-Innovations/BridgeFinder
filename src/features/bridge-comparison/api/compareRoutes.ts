@@ -48,27 +48,56 @@ function enrichBridges(
 export async function compareRoutes(
   params: ComparisonParams
 ): Promise<ComparisonResult> {
-  const response = await apiClient.post<ComparisonResponse>(
-    '/api/compare',
-    params
-  )
+  console.log('🔵 compareRoutes called with params:', params)
 
-  if (!response.success) {
-    throw new Error('Bridge comparison failed')
-  }
+  try {
+    const response = await apiClient.post<ComparisonResponse>(
+      '/api/compare',
+      params
+    )
 
-  const enrichedBridges = enrichBridges(response.bridges)
+    console.log('🟢 API Response received:', response)
+    console.log('🟢 Response type:', typeof response)
+    console.log('🟢 Response.success:', response?.success)
+    console.log('🟢 Response.bridges:', response?.bridges)
+    console.log('🟢 Response keys:', Object.keys(response || {}))
 
-  return {
-    bridges: enrichedBridges,
-    summary: response.summary,
-    timestamp: response.timestamp,
-    params: {
-      fromChainId: params.fromChainId,
-      toChainId: params.toChainId,
-      token: params.token,
-      amount: params.amount,
-    },
+    // Validate we have bridges array (API client already handles HTTP errors)
+    if (!response.bridges || !Array.isArray(response.bridges)) {
+      console.error('🔴 Invalid response - missing bridges:', response)
+      throw new Error(`Invalid API response: ${JSON.stringify(response)}`)
+    }
+
+    console.log('🟢 Bridges array length:', response.bridges.length)
+
+    const enrichedBridges = enrichBridges(response.bridges)
+    console.log('🟢 Enriched bridges:', enrichedBridges)
+
+    return {
+      bridges: enrichedBridges,
+      summary: response.summary || {
+        totalRoutes: 0,
+        avgCost: 0,
+        avgTime: '0 min',
+        availableRoutes: 0,
+      },
+      timestamp: response.timestamp || new Date().toISOString(),
+      params: {
+        fromChainId: params.fromChainId,
+        toChainId: params.toChainId,
+        token: params.token,
+        amount: Number(params.amount),
+      },
+    }
+  } catch (error) {
+    console.error('🔴 compareRoutes error:', error)
+    console.error('🔴 Error type:', error?.constructor?.name)
+    console.error('🔴 Error message:', (error as Error)?.message)
+
+    if (error instanceof Error) {
+      throw error
+    }
+    throw new Error('Unknown error during bridge comparison')
   }
 }
 

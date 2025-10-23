@@ -137,8 +137,16 @@ export async function handleCompare(request, env, debug) {
       for (const { name, adapter, config } of group) {
         // Skip adapters that require auth if no key is provided
         if (config.requiresAuth && !env[`${name}_API_KEY`]) {
-          if (debug) console.log(`Skipping ${name}: API key required`)
+          if (debug) {
+            console.log(
+              `[Handler] Skipping ${name}: API key required but not found`
+            )
+          }
           continue
+        }
+
+        if (config.requiresAuth && env[`${name}_API_KEY`]) {
+          console.log(`[Handler] ${name}: Using API key (authenticated)`)
         }
 
         providerCalls.push({
