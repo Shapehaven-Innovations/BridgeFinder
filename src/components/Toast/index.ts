@@ -1,3 +1,2 @@
-export { ToastContainer } from './Toast'
-export { useToast } from './useToast'
+export { ToastContainer, useToast } from './Toast'
 export type { ToastMessage, ToastType } from './Toast'

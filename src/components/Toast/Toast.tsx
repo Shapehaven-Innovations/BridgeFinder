@@ -1,18 +1,19 @@
 // components/Toast/Toast.tsx
-
 import React, { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import styles from './Toast.module.css'
 
-export interface Toast {
+export type ToastType = 'success' | 'error' | 'warning' | 'info'
+
+export interface ToastMessage {
   id: string
   message: string
-  type: 'success' | 'error' | 'warning' | 'info'
+  type: ToastType
   duration?: number
 }
 
 interface ToastItemProps {
-  toast: Toast
+  toast: ToastMessage
   onClose: (id: string) => void
 }
 
@@ -48,7 +49,7 @@ export const ToastItem: React.FC<ToastItemProps> = ({ toast, onClose }) => {
 }
 
 interface ToastContainerProps {
-  toasts: Toast[]
+  toasts: ToastMessage[]
   onClose: (id: string) => void
 }
 
@@ -68,13 +69,12 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({
   )
 }
 
-// Hook for managing toasts
 export const useToast = () => {
-  const [toasts, setToasts] = React.useState<Toast[]>([])
+  const [toasts, setToasts] = React.useState<ToastMessage[]>([])
 
   const addToast = (
     message: string,
-    type: Toast['type'] = 'info',
+    type: ToastType = 'info',
     duration?: number
   ) => {
     const id = Math.random().toString(36).substring(7)

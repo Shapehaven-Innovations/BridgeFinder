@@ -3,7 +3,7 @@ import React from 'react'
 import { Button } from '../../../../components/Button'
 import styles from './BridgeCard.module.css'
 
-interface BridgeCardProps {
+export interface BridgeCardProps {
   bridge: {
     name: string
     protocol: string
@@ -18,17 +18,17 @@ interface BridgeCardProps {
     position?: number
     savings?: number
   }
+  onBridge?: () => void
 }
 
 const formatCurrency = (value: number): string => {
   if (value === 0) {
     return '$0.00'
   }
-  // Always show 2 decimals for consistency
   return `$${value.toFixed(2)}`
 }
 
-export const BridgeCard: React.FC<BridgeCardProps> = ({ bridge }) => {
+export const BridgeCard: React.FC<BridgeCardProps> = ({ bridge, onBridge }) => {
   const {
     name,
     protocol,
@@ -61,44 +61,55 @@ export const BridgeCard: React.FC<BridgeCardProps> = ({ bridge }) => {
       <div className={styles.costSection}>
         <div className={styles.costLabel}>Total Cost</div>
         <div className={styles.costValue}>{formatCurrency(totalCost)}</div>
-        <div className={styles.savingsContainer}>
-          <div className={styles.savings}>
-            Save {formatCurrency(savings && savings > 0 ? savings : 0)}
+        {savings !== undefined && savings > 0 && (
+          <div className={styles.savingsContainer}>
+            <div className={styles.savings}>
+              Save {formatCurrency(savings)} vs highest
+            </div>
           </div>
+        )}
+      </div>
+
+      <div className={styles.breakdown}>
+        <div className={styles.breakdownRow}>
+          <span className={styles.breakdownLabel}>Bridge Fee:</span>
+          <span className={styles.breakdownValue}>
+            {formatCurrency(bridgeFee)}
+          </span>
+        </div>
+        <div className={styles.breakdownRow}>
+          <span className={styles.breakdownLabel}>Gas Fee:</span>
+          <span className={styles.breakdownValue}>
+            {formatCurrency(gasFee)}
+          </span>
         </div>
       </div>
 
       <div className={styles.details}>
         <div className={styles.detailRow}>
-          <span className={styles.detailLabel}>Bridge Fee:</span>
-          <span className={styles.detailValue}>
-            {formatCurrency(bridgeFee)}
-          </span>
+          <span className={styles.detailLabel}>⏱️ Time:</span>
+          <span className={styles.detailValue}>{time}</span>
         </div>
         <div className={styles.detailRow}>
-          <span className={styles.detailLabel}>Gas Fee:</span>
-          <span className={styles.detailValue}>{formatCurrency(gasFee)}</span>
-        </div>
-        <div className={styles.detailRow}>
-          <span className={styles.detailLabel}>Time:</span>
-          <span className={styles.detailValue}>{time || 'N/A'}</span>
-        </div>
-        <div className={styles.detailRow}>
-          <span className={styles.detailLabel}>Security:</span>
+          <span className={styles.detailLabel}>🛡️ Security:</span>
           <span className={styles.detailValue}>{security}</span>
         </div>
         <div className={styles.detailRow}>
-          <span className={styles.detailLabel}>Liquidity:</span>
+          <span className={styles.detailLabel}>💧 Liquidity:</span>
           <span className={styles.detailValue}>{liquidity}</span>
         </div>
         <div className={styles.detailRow}>
-          <span className={styles.detailLabel}>Route:</span>
+          <span className={styles.detailLabel}>🌉 Route:</span>
           <span className={styles.detailValue}>{route}</span>
         </div>
       </div>
 
-      <Button variant="primary" size="lg" className={styles.bridgeButton}>
-        Use {name}
+      <Button
+        variant={isBestDeal ? 'primary-gradient' : 'outline'}
+        fullWidth
+        onClick={onBridge}
+      >
+        Bridge via {name}
       </Button>
     </div>
   )

@@ -113,8 +113,8 @@ export function setSelectedProtocols(protocols: string[]): void {
  * Last comparison parameters
  */
 export interface LastComparisonParams {
-  fromChainId: number
-  toChainId: number
+  fromChainId: string
+  toChainId: string
   token: string
   amount: string
 }

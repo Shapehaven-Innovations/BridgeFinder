@@ -2,7 +2,7 @@
 import React from 'react'
 import styles from './Spinner.module.css'
 
-interface SpinnerProps {
+export interface SpinnerProps {
   size?: 'sm' | 'md' | 'lg'
   className?: string
 }

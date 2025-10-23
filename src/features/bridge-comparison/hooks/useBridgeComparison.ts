@@ -12,12 +12,12 @@ export function useBridgeComparison() {
     mutationFn: compareRoutes,
     onSuccess: (data) => {
       setResult(data)
-      // Save to localStorage for persistence
+      // Save to localStorage for persistence - convert numbers to strings
       setLastComparison({
-        fromChainId: data.params.fromChainId,
-        toChainId: data.params.toChainId,
+        fromChainId: String(data.params.fromChainId),
+        toChainId: String(data.params.toChainId),
         token: data.params.token,
-        amount: data.params.amount,
+        amount: String(data.params.amount),
       })
     },
   })
