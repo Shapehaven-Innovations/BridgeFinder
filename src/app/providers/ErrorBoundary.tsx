@@ -9,7 +9,7 @@ interface ErrorBoundaryState {
   error: Error | null
 }
 
-export class ErrorBoundary extends Component
+export class ErrorBoundary extends Component<
   ErrorBoundaryProps,
   ErrorBoundaryState
 > {
@@ -22,11 +22,11 @@ export class ErrorBoundary extends Component
     return { hasError: true, error }
   }
 
-  componentDidCatch(error: Error, errorInfo: { componentStack: string }) {
+  componentDidCatch(error: Error, errorInfo: { componentStack: string }): void {
     console.error('ErrorBoundary caught error:', error, errorInfo)
   }
 
-  render() {
+  render(): ReactNode {
     if (this.state.hasError) {
       return (
         <div className="error-container">
