@@ -170,7 +170,7 @@ export const BridgeForm: React.FC<BridgeFormProps> = ({
           type="submit"
           variant="primary"
           size="lg"
-          loading={isLoading}
+          isLoading={isLoading}
           className={styles.submitButton}
         >
           {isLoading ? 'Comparing Routes...' : 'Compare Routes'}
