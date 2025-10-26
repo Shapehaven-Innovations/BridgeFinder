@@ -42,6 +42,9 @@ export interface BridgeComparisonRequest {
   slippage?: string
 }
 
+// Type alias for ComparisonParams
+export type ComparisonParams = BridgeComparisonRequest
+
 export interface BridgeComparisonResponse {
   success: boolean
   bridges: BridgeQuote[]

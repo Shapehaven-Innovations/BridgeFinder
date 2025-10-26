@@ -1,116 +1,121 @@
 // src/features/bridge-comparison/components/BridgeCard/BridgeCard.tsx
 import React from 'react'
 import { Button } from '../../../../components/Button'
+import type { BridgeQuote } from '../../../../types/bridge'
 import styles from './BridgeCard.module.css'
 
-export interface BridgeCardProps {
-  bridge: {
-    name: string
-    protocol: string
-    totalCost: number
-    bridgeFee: number
-    gasFee: number
-    time: string
-    security: string
-    liquidity: string
-    route: string
-    isBestDeal?: boolean
-    position?: number
-    savings?: number
-  }
-  onBridge?: () => void
+interface BridgeCardProps {
+  bridge: BridgeQuote
 }
 
+// Helper function to format currency values
 const formatCurrency = (value: number): string => {
   if (value === 0) {
     return '$0.00'
   }
+
+  // For very small values (less than 0.01), show 4 decimals
+  if (value < 0.01) {
+    return `$${value.toFixed(4)}`
+  }
+
+  // For normal values, show 2 decimals
   return `$${value.toFixed(2)}`
 }
 
-export const BridgeCard: React.FC<BridgeCardProps> = ({ bridge, onBridge }) => {
+export const BridgeCard: React.FC<BridgeCardProps> = ({ bridge }) => {
   const {
     name,
     protocol,
     totalCost,
     bridgeFee,
     gasFee,
-    time,
+    estimatedTime,
     security,
     liquidity,
     route,
-    isBestDeal,
+    isBest,
     position,
     savings,
   } = bridge
 
   return (
-    <div className={`${styles.card} ${isBestDeal ? styles.bestDeal : ''}`}>
+    <div className={`${styles.card} ${isBest ? styles.bestDeal : ''}`}>
+      {isBest && (
+        <div className={styles.badge}>
+          <span className={styles.badgeIcon}>⭐</span>
+          <span className={styles.badgeText}>Best Deal</span>
+        </div>
+      )}
+
+      {position && (
+        <div className={styles.position}>
+          <span className={styles.positionNumber}>#{position}</span>
+        </div>
+      )}
+
       <div className={styles.header}>
-        <div className={styles.titleSection}>
+        <div className={styles.nameSection}>
           <h3 className={styles.name}>{name}</h3>
+          <span className={styles.protocol}>{protocol}</span>
         </div>
-        <div className={styles.badges}>
-          {isBestDeal && <span className={styles.bestBadge}>Best</span>}
-          {position && <span className={styles.position}>#{position}</span>}
-        </div>
-      </div>
 
-      <div className={styles.provider}>{protocol}</div>
-
-      <div className={styles.costSection}>
-        <div className={styles.costLabel}>Total Cost</div>
-        <div className={styles.costValue}>{formatCurrency(totalCost)}</div>
-        {savings !== undefined && savings > 0 && (
-          <div className={styles.savingsContainer}>
-            <div className={styles.savings}>
-              Save {formatCurrency(savings)} vs highest
-            </div>
+        <div className={styles.costSection}>
+          <div className={styles.totalCost}>
+            <span className={styles.costLabel}>Total Cost</span>
+            <span className={styles.costValue}>
+              {formatCurrency(totalCost)}
+            </span>
           </div>
-        )}
-      </div>
-
-      <div className={styles.breakdown}>
-        <div className={styles.breakdownRow}>
-          <span className={styles.breakdownLabel}>Bridge Fee:</span>
-          <span className={styles.breakdownValue}>
-            {formatCurrency(bridgeFee)}
-          </span>
-        </div>
-        <div className={styles.breakdownRow}>
-          <span className={styles.breakdownLabel}>Gas Fee:</span>
-          <span className={styles.breakdownValue}>
-            {formatCurrency(gasFee)}
-          </span>
+          {savings && savings > 0 && (
+            <div className={styles.savings}>
+              <span className={styles.savingsText}>
+                Save {formatCurrency(savings)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
       <div className={styles.details}>
         <div className={styles.detailRow}>
-          <span className={styles.detailLabel}>⏱️ Time:</span>
-          <span className={styles.detailValue}>{time}</span>
+          <span className={styles.detailLabel}>Bridge Fee:</span>
+          <span className={styles.detailValue}>
+            {formatCurrency(bridgeFee)}
+          </span>
         </div>
+
         <div className={styles.detailRow}>
-          <span className={styles.detailLabel}>🛡️ Security:</span>
+          <span className={styles.detailLabel}>Gas Fee:</span>
+          <span className={styles.detailValue}>{formatCurrency(gasFee)}</span>
+        </div>
+
+        <div className={styles.detailRow}>
+          <span className={styles.detailLabel}>Time:</span>
+          <span className={styles.detailValue}>{estimatedTime}</span>
+        </div>
+
+        <div className={styles.detailRow}>
+          <span className={styles.detailLabel}>Security:</span>
           <span className={styles.detailValue}>{security}</span>
         </div>
+
         <div className={styles.detailRow}>
-          <span className={styles.detailLabel}>💧 Liquidity:</span>
+          <span className={styles.detailLabel}>Liquidity:</span>
           <span className={styles.detailValue}>{liquidity}</span>
         </div>
+
         <div className={styles.detailRow}>
-          <span className={styles.detailLabel}>🌉 Route:</span>
+          <span className={styles.detailLabel}>Route:</span>
           <span className={styles.detailValue}>{route}</span>
         </div>
       </div>
 
-      <Button
-        variant={isBestDeal ? 'primary-gradient' : 'outline'}
-        fullWidth
-        onClick={onBridge}
-      >
-        Bridge via {name}
-      </Button>
+      <div className={styles.footer}>
+        <Button variant="primary" size="md" className={styles.bridgeButton}>
+          Use {name}
+        </Button>
+      </div>
     </div>
   )
 }

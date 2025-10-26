@@ -1,12 +1,13 @@
 // src/pages/BridgeFinderPage.tsx
 import React, { useState } from 'react'
 import { Button } from '@components/Button'
-import { BridgeCard } from '@/features/bridge-comparison/components/BridgeCard/BridgeCard'
+import { BridgeList } from '@/features/bridge-comparison/components/BridgeList'
 import {
   FilterSort,
   ComparisonSummary,
 } from '@/features/bridge-comparison/components/FilterSort/FilterSort'
 import { CardSkeletonGrid } from '@components/LoadingSkeleton'
+import type { BridgeQuote } from '@/types'
 import styles from './BridgeFinderPage.module.css'
 
 export const BridgeFinderPage: React.FC = () => {
@@ -18,51 +19,67 @@ export const BridgeFinderPage: React.FC = () => {
   const [sortBy, setSortBy] = useState<'cost' | 'time' | 'security'>('cost')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
 
-  // Mock data
+  // Mock data - properly typed as BridgeQuote[]
   const protocols = [
     { id: 'li.fi', name: 'LI.FI', count: 2 },
     { id: 'socket', name: 'Socket/Bungee', count: 1 },
     { id: 'jumper', name: 'Jumper', count: 1 },
   ]
 
-  const bridges = [
+  const bridges: BridgeQuote[] = [
     {
       name: 'Socket',
+      icon: '🔌',
+      provider: 'socket',
       protocol: 'socket',
       totalCost: 0.01,
       bridgeFee: 0.0,
       gasFee: 0.01,
-      time: '1 mins',
+      estimatedTime: '1 mins',
       security: 'Multi-Bridge Aggregator',
       liquidity: 'Aggregated',
       route: 'across',
-      isBestDeal: true,
+      outputAmount: null,
+      isBest: true,
       position: 1,
       savings: 0.54,
+      url: null,
     },
     {
       name: 'LI.FI',
+      icon: '💎',
+      provider: 'li.fi',
       protocol: 'li.fi',
       totalCost: 0.55,
       bridgeFee: 0.55,
       gasFee: 0.01,
-      time: '1 mins',
+      estimatedTime: '1 mins',
       security: 'Unspecified',
       liquidity: 'Unknown',
       route: 'Relay',
+      outputAmount: null,
+      isBest: false,
       position: 2,
+      savings: null,
+      url: null,
     },
     {
       name: 'Jumper',
+      icon: '🦘',
+      provider: 'jumper',
       protocol: 'jumper',
       totalCost: 0.75,
       bridgeFee: 0.74,
       gasFee: 0.01,
-      time: '2 mins',
+      estimatedTime: '2 mins',
       security: 'Multi-Bridge',
       liquidity: 'High',
       route: 'Stargate',
+      outputAmount: null,
+      isBest: false,
       position: 3,
+      savings: null,
+      url: null,
     },
   ]
 
@@ -81,11 +98,6 @@ export const BridgeFinderPage: React.FC = () => {
       setSortBy(field)
       setSortOrder('asc')
     }
-  }
-
-  const handleBridge = (bridgeName: string) => {
-    console.log(`Bridging with ${bridgeName}`)
-    // Navigate to external bridge URL
   }
 
   const filteredBridges = bridges.filter((bridge) =>
@@ -159,15 +171,7 @@ export const BridgeFinderPage: React.FC = () => {
               {isLoading ? (
                 <CardSkeletonGrid count={3} />
               ) : (
-                <div className={styles.bridgeGrid}>
-                  {filteredBridges.map((bridge, index) => (
-                    <BridgeCard
-                      key={`${bridge.protocol}-${index}`}
-                      {...bridge}
-                      onBridge={() => handleBridge(bridge.name)}
-                    />
-                  ))}
-                </div>
+                <BridgeList bridges={filteredBridges} />
               )}
             </section>
           </>
