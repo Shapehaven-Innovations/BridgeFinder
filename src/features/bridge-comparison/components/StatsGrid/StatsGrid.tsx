@@ -15,8 +15,9 @@ interface StatsGridProps {
 }
 
 // Helper function to format currency values consistently
-const formatCurrency = (value: number | null): string => {
-  if (value === null) {
+const formatCurrency = (value: number | null | undefined): string => {
+  // Check for null, undefined, or NaN
+  if (value == null || typeof value !== 'number' || isNaN(value)) {
     return 'N/A'
   }
 
