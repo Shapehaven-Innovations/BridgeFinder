@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Card } from '@components/Card'
 import { Button } from '@components/Button'
-import type { ComparisonParams } from '@/api/types'
+import type { ComparisonParams } from '@/types'
 import styles from './BridgeForm.module.css'
 
 const CHAINS = [
