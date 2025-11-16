@@ -81,15 +81,13 @@ export class BridgeAdapter {
     }
   }
 
+  // In worker/adapters/base.js or wherever BridgeAdapter is defined
   getTokenAddress(token, chainId) {
     const tokenCfg = TOKENS[token]
     if (!tokenCfg) return null
-    if (typeof tokenCfg.address === 'object') {
-      return tokenCfg.address[chainId] || tokenCfg.address[1]
-    }
-    return tokenCfg.address
+    // CHANGE: 'address' → 'addresses' (plural)
+    return tokenCfg.addresses?.[chainId] || null
   }
-
   async fetchWithTimeout(url, options = {}, timeout = CONFIG.REQUEST_TIMEOUT) {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeout)
