@@ -1,150 +1,160 @@
-/**
- * Format a number with thousand separators and decimal places
- */
-export function formatNumber(
-  value: number | string,
-  decimals: number = 2
-): string {
-  const num = typeof value === 'string' ? parseFloat(value) : value
-
-  if (isNaN(num)) {
-    return String(value)
-  }
-
-  // Format with specified decimals
-  const formatted = num.toFixed(decimals)
-
-  // Split into integer and decimal parts
-  const parts = formatted.split('.')
-
-  // Add thousand separators to integer part
-  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-
-  return parts.join('.')
-}
+// lib/format.ts - Formatting utility functions
 
 /**
- * Format a number as currency with symbol
+ * Format a number as currency (USD by default)
  */
 export function formatCurrency(
-  value: number | string,
-  options: {
-    decimals?: number
-    symbol?: string
-    symbolPosition?: 'before' | 'after'
-  } = {}
+  amount: number,
+  currency: string = 'USD',
+  locale: string = 'en-US'
 ): string {
-  const { decimals = 2, symbol = '$', symbolPosition = 'before' } = options
+  if (isNaN(amount) || amount === null || amount === undefined) {
+    return '$0.00'
+  }
 
-  const formatted = formatNumber(value, decimals)
-
-  return symbolPosition === 'before'
-    ? `${symbol}${formatted}`
-    : `${formatted} ${symbol}`
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: amount < 0.01 ? 6 : 2,
+    }).format(amount)
+  } catch (error) {
+    // Fallback formatting
+    return `$${amount.toFixed(2)}`
+  }
 }
 
 /**
- * Format a number as percentage
+ * Format time from seconds to human-readable string
  */
-export function formatPercentage(
-  value: number | string,
-  decimals: number = 2
-): string {
-  const num = typeof value === 'string' ? parseFloat(value) : value
+export function formatTime(seconds: number): string {
+  if (!seconds || seconds < 0) return '0 sec'
 
-  if (isNaN(num)) {
-    return String(value)
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = Math.floor(seconds % 60)
+
+  const parts: string[] = []
+
+  if (hours > 0) {
+    parts.push(`${hours} ${hours === 1 ? 'hr' : 'hrs'}`)
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes} min`)
+  }
+  if (secs > 0 && hours === 0) {
+    parts.push(`${secs} sec`)
   }
 
-  return `${formatNumber(num * 100, decimals)}%`
+  return parts.length > 0 ? parts.join(' ') : '< 1 sec'
 }
 
 /**
  * Format large numbers with K, M, B suffixes
  */
-export function formatCompact(value: number, decimals: number = 1): string {
-  if (value < 1000) {
-    return formatNumber(value, decimals)
+export function formatNumber(num: number): string {
+  if (num === null || num === undefined || isNaN(num)) return '0'
+
+  const absNum = Math.abs(num)
+  const sign = num < 0 ? '-' : ''
+
+  if (absNum >= 1e9) {
+    return `${sign}${(absNum / 1e9).toFixed(2)}B`
+  }
+  if (absNum >= 1e6) {
+    return `${sign}${(absNum / 1e6).toFixed(2)}M`
+  }
+  if (absNum >= 1e3) {
+    return `${sign}${(absNum / 1e3).toFixed(2)}K`
   }
 
-  const units = ['K', 'M', 'B', 'T']
-  const magnitude = Math.floor(Math.log10(value) / 3)
-  const suffix = units[magnitude - 1]
-
-  if (!suffix) {
-    return formatNumber(value, decimals)
-  }
-
-  const scaled = value / Math.pow(1000, magnitude)
-  return `${formatNumber(scaled, decimals)}${suffix}`
+  return `${sign}${absNum.toFixed(2)}`
 }
 
 /**
- * Truncate a string to a maximum length with ellipsis
+ * Format percentage
  */
-export function truncate(
-  str: string,
-  maxLength: number,
-  ellipsis: string = '...'
-): string {
-  if (str.length <= maxLength) {
-    return str
-  }
+export function formatPercentage(decimal: number): string {
+  if (!decimal && decimal !== 0) return '0%'
 
-  return str.slice(0, maxLength - ellipsis.length) + ellipsis
-}
-
-/**
- * Truncate an Ethereum address for display
- */
-export function truncateAddress(
-  address: string,
-  startLength: number = 6,
-  endLength: number = 4
-): string {
-  if (!address || address.length <= startLength + endLength) {
-    return address
-  }
-
-  return `${address.slice(0, startLength)}...${address.slice(-endLength)}`
-}
-
-/**
- * Format a decimal slippage value to percentage string
- */
-export function formatSlippage(decimal: string | number): string {
   const num = typeof decimal === 'string' ? parseFloat(decimal) : decimal
   return `${(num * 100).toFixed(2)}%`
 }
 
 /**
- * Parse a percentage string to decimal number
+ * Format address with ellipsis
  */
-export function parseSlippage(percentage: string): number {
-  const cleaned = percentage.replace('%', '').trim()
-  const num = parseFloat(cleaned)
+export function formatAddress(address: string, chars: number = 4): string {
+  if (!address) return ''
+  if (address.length <= chars * 2 + 3) return address
 
-  if (isNaN(num)) {
-    return 0.01 // Default 1%
+  return `${address.slice(0, chars + 2)}...${address.slice(-chars)}`
+}
+
+/**
+ * Format date to locale string
+ */
+export function formatDate(
+  date: string | Date | number,
+  locale: string = 'en-US',
+  options?: Intl.DateTimeFormatOptions
+): string {
+  try {
+    const dateObj =
+      typeof date === 'string' || typeof date === 'number'
+        ? new Date(date)
+        : date
+
+    const defaultOptions: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      ...options,
+    }
+
+    return new Intl.DateTimeFormat(locale, defaultOptions).format(dateObj)
+  } catch (error) {
+    return 'Invalid date'
+  }
+}
+
+/**
+ * Format token amount with proper decimals
+ */
+export function formatTokenAmount(
+  amount: number | string,
+  decimals: number = 18,
+  displayDecimals: number = 4
+): string {
+  if (!amount || amount === '0') return '0'
+
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount
+  const value = num / Math.pow(10, decimals)
+
+  if (value < 0.0001) {
+    return '< 0.0001'
   }
 
-  return num / 100
+  return value.toFixed(displayDecimals).replace(/\.?0+$/, '')
 }
 
 /**
- * Capitalize first letter of a string
+ * Parse token amount to wei/smallest unit
  */
-export function capitalize(str: string): string {
-  if (!str) return str
-  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
-}
+export function parseTokenAmount(
+  amount: string,
+  decimals: number = 18
+): string {
+  try {
+    const num = parseFloat(amount)
+    if (isNaN(num)) return '0'
 
-/**
- * Convert a string to title case
- */
-export function toTitleCase(str: string): string {
-  return str
-    .split(' ')
-    .map((word) => capitalize(word))
-    .join(' ')
+    const value = num * Math.pow(10, decimals)
+    return Math.floor(value).toString()
+  } catch (error) {
+    return '0'
+  }
 }
